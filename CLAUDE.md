@@ -27,8 +27,9 @@ RULES
    a) code + tests,
    b) reports/stepX.md: what was done, numbers, DoD met yes/no, fallback used,
    c) paper text for the matching section (LaTeX, CVPR style, with \cite).
-7. Environment: local Mac M4 (no CUDA) for scripting; GPU runs on Kaggle.
-   Mark clearly which code runs where.
+7. Environment: local Mac M4 (no CUDA) for scripting; GPU runs on molab
+   (marimo notebooks, RTX Pro 6000 Blackwell). Write GPU notebooks as marimo
+   .py files in notebooks/. Mark clearly which code runs where.
 8. Never use em dashes in any text.
 9. Start every reply with: "Step: <id> | Week question: <q> | Days left to
    Nov 10: <n>".
