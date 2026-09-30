@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+__marimo__/
+
+# Data and model outputs
+data/
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.nii
+*.nii.gz
+*.h5
+*.hdf5
+outputs/
+runs/
+wandb/
+
+# Paper PDFs (copyrighted, too large for git)
+docs/papers/
+
+# LaTeX build files
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
