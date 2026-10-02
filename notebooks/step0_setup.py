@@ -428,17 +428,29 @@ def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
     if _failed:
         print("WARNING: could not install:", _failed)
 
+    # CUDA extensions import torch in setup.py, so pip's isolated build env
+    # (which has no torch) cannot build them. Build flag only, no source change.
+    deviations.append(
+        {
+            "what": "All CUDA extensions (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, "
+            "4DRGS submodules) installed with `pip install --no-build-isolation`",
+            "instead_of": "plain `pip install` from the READMEs",
+            "reason": "Isolated build env has no torch: ModuleNotFoundError at the simple-knn build "
+            "(molab, Oct 2). Builds against the installed torch 2.11.0+cu130. Build flag only; source untouched.",
+        }
+    )
+
     def _build(path, label):
         """Build one CUDA extension. Plain first; one retry with a logged nvcc flag."""
         try:
-            pip_install(["-e", str(path)], env=_env)
+            pip_install(["--no-build-isolation", "-e", str(path)], env=_env)
             return "plain"
         except RuntimeError:
             # Build-flag-only retry. NVCC_APPEND_FLAGS is read by nvcc itself, so
             # no file of the repo is edited. Needed when a newer GCC no longer
             # pulls in <cfloat> / <cstdint> implicitly.
             _flags = "-include cfloat -include cstdint"
-            pip_install(["-e", str(path)], env={**_env, "NVCC_APPEND_FLAGS": _flags})
+            pip_install(["--no-build-isolation", "-e", str(path)], env={**_env, "NVCC_APPEND_FLAGS": _flags})
             deviations.append(
                 {
                     "what": f"{label}: built with NVCC_APPEND_FLAGS='{_flags}'",
@@ -456,7 +468,7 @@ def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
         ),
     }
     # TIGRE Python package (pyproject.toml is at the repo root at this commit).
-    pip_install([str(TIGRE_DIR)], env=_env)
+    pip_install(["--no-build-isolation", str(TIGRE_DIR)], env=_env)
     build_info["tigre"] = "plain"
     build_info["pip_failed"] = _failed
     build_info["build_minutes"] = round((time.time() - _t0) / 60, 1)
@@ -593,13 +605,13 @@ def _(
         try:
             _env = {"CUDA_HOME": CUDA_HOME, "CUDA_PATH": CUDA_HOME}
             pip_install(["pyhocon", "PyMCubes", "pymeshlab"])
-            pip_install([str(TCNN_DIR / "bindings" / "torch")], env=_env)
+            pip_install(["--no-build-isolation", str(TCNN_DIR / "bindings" / "torch")], env=_env)
             for _sub in [
                 "diff-Xray-gaussian-rasterization-voxelization-sortfree",
                 "diff-Xray-gaussian-rasterization-voxelization-legacy",
                 "simple-knn",
             ]:
-                pip_install([str(DRGS_DIR / "submodules" / _sub)], env=_env)
+                pip_install(["--no-build-isolation", str(DRGS_DIR / "submodules" / _sub)], env=_env)
 
             _case = WORK / "data_4drgs" / "case2"
             if not (_case / "transforms.json").exists():

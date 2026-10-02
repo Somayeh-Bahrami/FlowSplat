@@ -61,7 +61,7 @@ REFERENCES.md said MICCAI 2025; corrected.
 | Compute capability | 12.0 (sm_120, in torch's arch list) |
 | torch | 2.11.0+cu130 |
 | CUDA (torch build) | 13.0, cuDNN 9.19 |
-| nvcc | Not in the molab image. Installed from pip (`cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]`, same version as torch's). Version: TODO |
+| nvcc | Not in the molab image. Installed from pip (`cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]`, same version as torch's). Version: 13.0 (second molab run, Oct 2) |
 | Python | 3.13.11 |
 | Driver | 595.71.05 |
 | GCC | 14.2.0 (Debian) |
@@ -72,7 +72,8 @@ Values from the first molab run on Oct 2, 2026 (repo at `d517294`).
 
 | Date | Problem | Action | Solved |
 |---|---|---|---|
-| Oct 2 | `nvcc not found`: the molab image has torch with pip CUDA libraries but no CUDA toolkit | Notebook now installs the matching compiler from NVIDIA's pip wheels, uses `<site-packages>/nvidia/cu13` as `CUDA_HOME`, and adds the linker symlinks (`libcudart.so`, `lib64`) inside that pip prefix | TODO (rerun pending). Time box ends Oct 4 |
+| Oct 2 | `nvcc not found`: the molab image has torch with pip CUDA libraries but no CUDA toolkit | Notebook now installs the matching compiler from NVIDIA's pip wheels, uses `<site-packages>/nvidia/cu13` as `CUDA_HOME`, and adds the linker symlinks (`libcudart.so`, `lib64`) inside that pip prefix | Yes (second run: nvcc 13.0 found, sm_120 supported) |
+| Oct 2 | simple-knn build: `ModuleNotFoundError: No module named 'torch'` inside pip's isolated build env (setup.py imports torch) | Every CUDA extension install (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, 4DRGS submodules) now uses `pip install --no-build-isolation`, so it builds against the installed torch 2.11.0+cu130. Build flag only | TODO (rerun pending). Time box ends Oct 4 |
 
 ## R2-Gaussian reproduction (its own example case)
 
@@ -126,6 +127,7 @@ list comes from `deviations` in the JSON):
 | Python, torch and CUDA versions of the molab image (TODO exact) | R2-Gaussian README: Python 3.9, torch 2.1.2+cu118; pinned `requirements.txt` | The Blackwell GPU is not supported by those old builds. Same packages, unpinned |
 | TIGRE at commit `6b0951a` (v3.1.3 line) | R2-Gaussian README: TIGRE v2.3 zip | Rule: pin the official repo to a commit; v3.1.x reads the GPU architectures from nvcc at build time |
 | CUDA compiler from pip (`cuda-toolkit` extras), `CUDA_HOME` inside site-packages, linker symlinks added there | A system CUDA toolkit | molab has no `nvcc`. Same CUDA version as torch. No repo file touched |
+| `pip install --no-build-isolation` for every CUDA extension (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, 4DRGS submodules) | Plain `pip install` / `pip install -e` | Isolated build env has no torch, so setup.py fails to import it. Build flag only; no source change |
 | `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"`, only if the plain build fails | Plain `pip install -e` | Build flag only, for newer GCC. Used: TODO |
 | 4DRGS: `--fdk_toolbox=tigre`; test with `--render_2d` only | Default `leap`; README test also has `--render_fixview --VQR` | TIGRE is already built; CLI flags only. Whether the README numbers used LEAP or TIGRE is UNVERIFIED |
 
