@@ -1,8 +1,10 @@
 # Runs on: molab GPU (RTX Pro 6000 Blackwell). Not runnable on the M4 (needs CUDA).
 #
 # Step 0.1: GPU environment and code base.
-#   a) GitHub token from a password field (never hardcoded, never printed)
-#   b) clone or pull the FlowSplat repo
+#   a) GitHub token from the GH_TOKEN environment variable if set, else from a
+#      password field (never hardcoded, never printed)
+#   b) use the FlowSplat repo this notebook already sits in (bootstrap case);
+#      only if it is not inside the repo, clone or pull it
 #   c) print torch / CUDA / GPU / compute capability
 #   d) clone the OFFICIAL repos, each pinned to a commit hash
 #   e) install and build them for this GPU (CUDA extensions included)
@@ -15,6 +17,12 @@
 # deviation from their READMEs (environment versions, build flags, CLI flags)
 # is appended to `deviations` and saved. `git diff` of each repo is checked at
 # the end and stored as `source_untouched`.
+#
+# Two ways to run:
+#   - opened in marimo: press the "Run Step 0.1 setup" button
+#   - from a bootstrap notebook or a terminal, inside the cloned repo:
+#       python notebooks/step0_setup.py
+#     (script mode starts without the button; FLOWSPLAT_RUN_4DRGS=0 skips 4DRGS)
 
 import marimo
 
@@ -107,13 +115,22 @@ def _(Path, os):
 
 
 @app.cell
-def _(mo):
-    # a) Token is typed here at run time. It is never written to disk or printed.
-    token_box = mo.ui.text(kind="password", label="GitHub token (leave empty if the repo is public)")
-    run_4drgs = mo.ui.checkbox(value=True, label="Also run 4DRGS on its example case (adds a tiny-cuda-nn build)")
+def _(mo, os):
+    # a) Token: GH_TOKEN from the environment wins; else it is typed here at run
+    # time. It is never written to disk or printed.
+    token_box = mo.ui.text(
+        kind="password",
+        label="GitHub token (not needed when GH_TOKEN is set or the repo is already cloned)",
+    )
+    run_4drgs = mo.ui.checkbox(
+        value=os.environ.get("FLOWSPLAT_RUN_4DRGS", "1") != "0",
+        label="Also run 4DRGS on its example case (adds a tiny-cuda-nn build)",
+    )
     run_btn = mo.ui.run_button(label="Run Step 0.1 setup")
+    # Script mode (python notebooks/step0_setup.py) has no button to press.
+    AUTORUN = mo.app_meta().mode == "script" or os.environ.get("FLOWSPLAT_AUTORUN") == "1"
     mo.vstack([mo.md("## Step 0.1: GPU environment and code base"), token_box, run_4drgs, run_btn])
-    return run_4drgs, run_btn, token_box
+    return AUTORUN, run_4drgs, run_btn, token_box
 
 
 @app.cell
@@ -192,40 +209,58 @@ def _(os, shutil, subprocess, sys):
 
 
 @app.cell
-def _(FLOWSPLAT_URL, WORK, mo, run_btn, sh, sys, token_box):
-    # b) Clone or pull the FlowSplat repo.
-    mo.stop(not run_btn.value, mo.md("Press **Run Step 0.1 setup** to start."))
+def _(AUTORUN, FLOWSPLAT_URL, Path, WORK, mo, os, run_btn, sh, sys, token_box):
+    # b) Locate the FlowSplat repo. If this notebook already runs inside a
+    # clone (molab bootstrap case), use it as is. Otherwise clone or pull.
+    mo.stop(not (run_btn.value or AUTORUN), mo.md("Press **Run Step 0.1 setup** to start."))
     import base64 as _b64
 
-    _token = token_box.value.strip()
-    _env = {"GIT_TERMINAL_PROMPT": "0"}
-    if _token:
-        # Token goes to git as an HTTP header through the environment, so it is
-        # not stored in .git/config and not on the command line.
-        # Same mechanism as flowsplat.setup_check.git_auth_env (not importable
-        # yet, because the repo is not cloned at this point).
-        _enc = _b64.b64encode(f"x-access-token:{_token}".encode()).decode()
-        _env.update(
-            {
-                "GIT_CONFIG_COUNT": "1",
-                "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
-                "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {_enc}",
-            }
-        )
-    FLOWSPLAT_DIR = WORK / "FlowSplat"
+    def _repo_root():
+        """First parent of the notebook dir or cwd that holds src/flowsplat. Ref: OURS (tooling)."""
+        _starts = [Path.cwd()]
+        try:
+            _starts.insert(0, Path(mo.notebook_dir()))
+        except Exception:
+            pass
+        for _start in _starts:
+            for _p in [_start.resolve(), *_start.resolve().parents]:
+                if (_p / "src" / "flowsplat" / "setup_check.py").exists():
+                    return _p
+        return None
+
     WORK.mkdir(parents=True, exist_ok=True)
-    if (FLOWSPLAT_DIR / ".git").exists():
-        sh(["git", "pull", "--ff-only"], cwd=FLOWSPLAT_DIR, env=_env, secret=_token or None)
+    FLOWSPLAT_DIR = _repo_root()
+    if FLOWSPLAT_DIR is not None:
+        print("Already inside the repo, clone skipped:", FLOWSPLAT_DIR)
     else:
-        sh(["git", "clone", FLOWSPLAT_URL, FLOWSPLAT_DIR], env=_env, secret=_token or None)
-    flowsplat_commit = sh(["git", "rev-parse", "HEAD"], cwd=FLOWSPLAT_DIR).strip()
+        _token = (os.environ.get("GH_TOKEN") or token_box.value or "").strip()
+        _env = {"GIT_TERMINAL_PROMPT": "0"}
+        if _token:
+            # Token goes to git as an HTTP header through the environment, so it
+            # is not stored in .git/config and not on the command line.
+            # Same mechanism as flowsplat.setup_check.git_auth_env (not
+            # importable yet, because the repo is not cloned at this point).
+            _enc = _b64.b64encode(f"x-access-token:{_token}".encode()).decode()
+            _env.update(
+                {
+                    "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+                    "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {_enc}",
+                }
+            )
+        FLOWSPLAT_DIR = WORK / "FlowSplat"
+        if (FLOWSPLAT_DIR / ".git").exists():
+            sh(["git", "pull", "--ff-only"], cwd=FLOWSPLAT_DIR, env=_env, secret=_token or None)
+        else:
+            sh(["git", "clone", FLOWSPLAT_URL, FLOWSPLAT_DIR], env=_env, secret=_token or None)
+    flowsplat_commit = sh(["git", "rev-parse", "HEAD"], cwd=FLOWSPLAT_DIR, check=False).strip()
 
     sys.path.insert(0, str(FLOWSPLAT_DIR / "src"))
     try:
         from flowsplat import setup_check
     except ImportError as _e:
         raise RuntimeError(
-            "src/flowsplat/setup_check.py is not in the cloned repo. Push the Step 0.1 files to GitHub first."
+            "src/flowsplat/setup_check.py is not in the repo. Pull the latest main first."
         ) from _e
     print("FlowSplat at", flowsplat_commit)
     return FLOWSPLAT_DIR, flowsplat_commit, setup_check
@@ -601,6 +636,7 @@ def _(
     _path.parent.mkdir(parents=True, exist_ok=True)
     _path.write_text(json.dumps(results, indent=2, default=str))
     print("Saved", _path)
+    print(json.dumps(results, indent=2, default=str))  # visible in script mode too
     mo.vstack(
         [
             mo.md(f"**Saved** `{_path}`. Paste the block below back to Claude to fill `reports/step0.1.md`."),

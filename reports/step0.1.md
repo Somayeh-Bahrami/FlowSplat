@@ -24,8 +24,10 @@ Decided by the project owner on Oct 1:
 | `notebooks/step0_setup.py` | molab GPU |
 | `src/flowsplat/setup_check.py`, `tests/test_setup_check.py` | M4 (CPU), 9 tests pass |
 
-The notebook imports `flowsplat.setup_check` from the cloned repo, so the
-Step 0.1 files must be on GitHub before the molab run.
+The notebook uses the repo it already sits in (molab bootstrap case) and
+skips the clone. Only when it is not inside the repo does it clone, with the
+token from `GH_TOKEN` if set, else from the password field. Run as a script
+(`python notebooks/step0_setup.py`) it starts without the button.
 
 ## Pinned commits
 

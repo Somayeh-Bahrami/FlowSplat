@@ -78,6 +78,7 @@ def test_notebook_parses_and_has_no_hardcoded_token():
     src = (ROOT / "notebooks" / "step0_setup.py").read_text()
     ast.parse(src)
     assert 'kind="password"' in src
+    assert 'os.environ.get("GH_TOKEN")' in src
     for prefix in ("ghp_", "github_pat_", "gho_"):
         assert prefix not in src
 
