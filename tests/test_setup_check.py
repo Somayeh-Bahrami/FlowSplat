@@ -95,3 +95,21 @@ def test_notebook_pins_are_full_commit_hashes():
     assert {"R2G_COMMIT", "TIGRE_COMMIT", "DRGS_COMMIT", "TCNN_COMMIT"} <= set(pins)
     for value in pins.values():
         assert len(value) == 40 and all(c in "0123456789abcdef" for c in value)
+
+
+def test_find_and_prepare_pip_cuda_home(tmp_path):
+    assert sc.find_pip_cuda_home([tmp_path]) is None
+    home = tmp_path / "nvidia" / "cu13"
+    (home / "bin").mkdir(parents=True)
+    (home / "lib").mkdir()
+    (home / "bin" / "nvcc").write_text("#!/bin/sh\n")
+    (home / "lib" / "libcudart.so.13").write_text("")
+    (home / "lib" / "libcudart_static.a").write_text("")
+    assert sc.find_pip_cuda_home([tmp_path / "missing", tmp_path]) == home
+
+    created = sc.prepare_pip_cuda_home(home)
+    assert (home / "lib" / "libcudart.so").is_symlink()
+    assert (home / "lib64" / "libcudart.so").exists()
+    assert len(created) == 2
+    assert (home / "bin" / "nvcc").stat().st_mode & 0o111
+    assert sc.prepare_pip_cuda_home(home) == []  # second call changes nothing

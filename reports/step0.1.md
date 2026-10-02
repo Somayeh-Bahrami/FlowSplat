@@ -57,13 +57,22 @@ REFERENCES.md said MICCAI 2025; corrected.
 
 | Item | Value |
 |---|---|
-| GPU name | TODO |
-| Compute capability | TODO |
-| torch | TODO |
-| CUDA (torch build) | TODO |
-| nvcc | TODO |
-| Python | TODO |
-| Driver | TODO |
+| GPU name | NVIDIA RTX PRO 6000 Blackwell Server Edition (95.0 GB) |
+| Compute capability | 12.0 (sm_120, in torch's arch list) |
+| torch | 2.11.0+cu130 |
+| CUDA (torch build) | 13.0, cuDNN 9.19 |
+| nvcc | Not in the molab image. Installed from pip (`cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]`, same version as torch's). Version: TODO |
+| Python | 3.13.11 |
+| Driver | 595.71.05 |
+| GCC | 14.2.0 (Debian) |
+
+Values from the first molab run on Oct 2, 2026 (repo at `d517294`).
+
+## Debug log
+
+| Date | Problem | Action | Solved |
+|---|---|---|---|
+| Oct 2 | `nvcc not found`: the molab image has torch with pip CUDA libraries but no CUDA toolkit | Notebook now installs the matching compiler from NVIDIA's pip wheels, uses `<site-packages>/nvidia/cu13` as `CUDA_HOME`, and adds the linker symlinks (`libcudart.so`, `lib64`) inside that pip prefix | TODO (rerun pending). Time box ends Oct 4 |
 
 ## R2-Gaussian reproduction (its own example case)
 
@@ -116,6 +125,7 @@ list comes from `deviations` in the JSON):
 |---|---|---|
 | Python, torch and CUDA versions of the molab image (TODO exact) | R2-Gaussian README: Python 3.9, torch 2.1.2+cu118; pinned `requirements.txt` | The Blackwell GPU is not supported by those old builds. Same packages, unpinned |
 | TIGRE at commit `6b0951a` (v3.1.3 line) | R2-Gaussian README: TIGRE v2.3 zip | Rule: pin the official repo to a commit; v3.1.x reads the GPU architectures from nvcc at build time |
+| CUDA compiler from pip (`cuda-toolkit` extras), `CUDA_HOME` inside site-packages, linker symlinks added there | A system CUDA toolkit | molab has no `nvcc`. Same CUDA version as torch. No repo file touched |
 | `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"`, only if the plain build fails | Plain `pip install -e` | Build flag only, for newer GCC. Used: TODO |
 | 4DRGS: `--fdk_toolbox=tigre`; test with `--render_2d` only | Default `leap`; README test also has `--render_fixview --VQR` | TIGRE is already built; CLI flags only. Whether the README numbers used LEAP or TIGRE is UNVERIFIED |
 
@@ -143,7 +153,9 @@ change the project."
 - The notebook has not been executed. On the M4 it was only parsed and its
   cell inputs and outputs were checked.
 - Whether R2-Gaussian and 4DRGS run unchanged with a current numpy / torch.
-- Whether molab provides `nvcc`. The notebook stops with a clear message if
-  it does not.
+- Whether the pip CUDA compiler builds the extensions (layout checked from
+  the wheel file lists only).
+- Whether every Python dependency has a wheel for Python 3.13 (open3d is the
+  one to watch). Failures are listed in `build.pip_failed`.
 - Size of the R2-Gaussian dataset zip (all 15 cases are in one file; only
   `0_chest_cone` is extracted).

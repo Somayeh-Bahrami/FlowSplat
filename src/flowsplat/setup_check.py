@@ -10,7 +10,9 @@ Nothing here touches the method; it is tooling only.
 from __future__ import annotations
 
 import base64
+import os
 import re
+from pathlib import Path
 
 _FLOAT = r"([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)"
 
@@ -140,3 +142,56 @@ def cube_center_ray_integral(side_mm: float, mu: float = 1.0) -> float:
     for the TIGRE forward projector.
     """
     return mu * side_mm
+
+
+def find_pip_cuda_home(site_dirs) -> Path | None:
+    """Find a CUDA toolkit root installed by NVIDIA's pip wheels.
+
+    The CUDA 13 wheels (nvidia-cuda-nvcc, nvidia-cuda-runtime, ...) all unpack
+    into one prefix, <site-packages>/nvidia/cu13/{bin,include,lib}, so that
+    folder can serve as CUDA_HOME. Returns the first prefix that holds
+    bin/nvcc, or None.
+
+    Ref: OURS (tooling). Layout read from the file lists of the wheels
+    nvidia_cuda_nvcc-13.0.88 and nvidia_cuda_runtime-13.0.96 on PyPI
+    (Oct 2, 2026).
+    """
+    for site in site_dirs:
+        base = Path(site) / "nvidia"
+        if not base.is_dir():
+            continue
+        for prefix in sorted(base.glob("cu*"), reverse=True):
+            if (prefix / "bin" / "nvcc").exists():
+                return prefix
+    return None
+
+
+def prepare_pip_cuda_home(cuda_home) -> list:
+    """Make a pip-installed CUDA prefix usable by setup.py builds.
+
+    The wheels ship only versioned libraries (libcudart.so.13) and a `lib`
+    folder. Linkers ask for `-lcudart` (needs libcudart.so) and build scripts
+    such as TIGRE's expect `lib64`. This adds the missing symlinks and makes
+    the compiler binaries executable. Returns the list of links created.
+
+    Ref: OURS (tooling). No file of R2-Gaussian, TIGRE or 4DRGS is touched.
+    """
+    cuda_home = Path(cuda_home)
+    created = []
+    lib = cuda_home / "lib"
+    if lib.is_dir():
+        for f in sorted(lib.iterdir()):
+            m = re.match(r"^(lib[\w+-]+\.so)\.\d+", f.name)
+            if m and not (lib / m.group(1)).exists():
+                os.symlink(f.name, lib / m.group(1))
+                created.append(str(lib / m.group(1)))
+        lib64 = cuda_home / "lib64"
+        if not lib64.exists():
+            os.symlink("lib", lib64)
+            created.append(str(lib64))
+    bin_dir = cuda_home / "bin"
+    if bin_dir.is_dir():
+        for f in bin_dir.iterdir():
+            if f.is_file():
+                f.chmod(f.stat().st_mode | 0o111)
+    return created

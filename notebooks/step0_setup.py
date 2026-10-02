@@ -267,7 +267,7 @@ def _(AUTORUN, FLOWSPLAT_URL, Path, WORK, mo, os, run_btn, sh, sys, token_box):
 
 
 @app.cell
-def _(flowsplat_commit, os, pip_install, shutil, subprocess, sys):
+def _(flowsplat_commit, os, pip_install, setup_check, shutil, subprocess, sys):
     # c) torch version, CUDA version, GPU name, compute capability.
     deviations = []
     try:
@@ -286,6 +286,36 @@ def _(flowsplat_commit, os, pip_install, shutil, subprocess, sys):
     for _home in [os.environ.get("CUDA_HOME"), os.environ.get("CUDA_PATH"), "/usr/local/cuda"]:
         if not _nvcc and _home and os.path.exists(os.path.join(_home, "bin", "nvcc")):
             _nvcc = os.path.join(_home, "bin", "nvcc")
+
+    _toolkit_source = "system"
+    if _nvcc is None:
+        # No system CUDA toolkit (molab image). torch's own CUDA libraries come
+        # from NVIDIA's pip wheels (`cuda-toolkit`), so the matching compiler is
+        # installed the same way: nvcc, nvvm, crt, CCCL (thrust) and cudart
+        # headers, all into <site-packages>/nvidia/cuXX.
+        import importlib.metadata as _md
+        import site as _site
+        import sysconfig as _sysconfig
+
+        try:
+            _spec = "cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]==" + _md.version("cuda-toolkit")
+        except _md.PackageNotFoundError:
+            _spec = f"cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]=={torch.version.cuda}.*"
+        pip_install([_spec])
+        _sites = [_sysconfig.get_paths()["purelib"], _sysconfig.get_paths()["platlib"], *_site.getsitepackages()]
+        _home = setup_check.find_pip_cuda_home(_sites)
+        if _home is not None:
+            _links = setup_check.prepare_pip_cuda_home(_home)
+            _nvcc = str(_home / "bin" / "nvcc")
+            _toolkit_source = f"pip ({_spec})"
+            deviations.append(
+                {
+                    "what": f"CUDA compiler installed from pip: {_spec}; CUDA_HOME = {_home}",
+                    "instead_of": "a system CUDA toolkit, as the READMEs assume",
+                    "reason": "The molab image has no nvcc. Same CUDA version as the installed torch build. "
+                    f"Symlinks added inside the pip prefix for the linker: {len(_links)}. No source change.",
+                }
+            )
 
     def _run(cmd):
         try:
@@ -306,6 +336,7 @@ def _(flowsplat_commit, os, pip_install, shutil, subprocess, sys):
         "gpu_memory_gb": round(torch.cuda.get_device_properties(0).total_memory / 2**30, 1),
         "driver": _run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"]),
         "nvcc_path": _nvcc,
+        "cuda_toolkit_source": _toolkit_source,
         "nvcc_version": _run([_nvcc, "--version"]).splitlines()[-2:] if _nvcc else None,
         "gcc": (_run(["gcc", "--version"]) or "").splitlines()[:1],
     }
@@ -313,11 +344,14 @@ def _(flowsplat_commit, os, pip_install, shutil, subprocess, sys):
         print(f"{_k}: {_v}")
     if _nvcc is None:
         raise RuntimeError(
-            "nvcc not found. The CUDA extensions cannot be built without the CUDA toolkit. "
-            "Install a toolkit matching torch_cuda, then rerun. If that is not possible on molab, "
-            "apply the Step 0.1 fallback (another cloud GPU)."
+            "nvcc not found, and the pip install of the CUDA compiler did not provide one. "
+            "The CUDA extensions cannot be built. Apply the Step 0.1 fallback (another cloud GPU)."
         )
     CUDA_HOME = os.path.dirname(os.path.dirname(_nvcc))
+    # Build scripts look for nvcc on PATH (tiny-cuda-nn) and for CUDA_HOME (torch, TIGRE).
+    os.environ["CUDA_HOME"] = CUDA_HOME
+    os.environ["CUDA_PATH"] = CUDA_HOME
+    os.environ["PATH"] = os.path.join(CUDA_HOME, "bin") + os.pathsep + os.environ.get("PATH", "")
     deviations.append(
         {
             "what": f"Environment: python {env_info['python']}, torch {env_info['torch']} (CUDA {env_info['torch_cuda']})",
@@ -379,13 +413,20 @@ def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
     _env = {"CUDA_HOME": CUDA_HOME, "CUDA_PATH": CUDA_HOME}
 
     # Same packages as r2_gaussian/requirements.txt and environment.yml, unpinned.
-    pip_install(
-        [
-            "numpy", "Cython", "setuptools", "wheel", "gdown", "pyyaml", "tqdm", "matplotlib",
-            "open3d", "opencv-python-headless", "plyfile", "scipy", "SimpleITK", "scikit-image",
-            "tensorboard", "tensorboardX", "pydicom", "pyvista", "tifffile", "torchvision",
-        ]
-    )
+    # Installed one by one so that a package without a wheel for this Python
+    # is reported by name instead of stopping everything.
+    _failed = []
+    for _pkg in [
+        "numpy", "Cython", "setuptools", "wheel", "gdown", "pyyaml", "tqdm", "matplotlib",
+        "open3d", "opencv-python-headless", "plyfile", "scipy", "SimpleITK", "scikit-image",
+        "tensorboard", "tensorboardX", "pydicom", "pyvista", "tifffile", "torchvision",
+    ]:
+        try:
+            pip_install([_pkg])
+        except RuntimeError:
+            _failed.append(_pkg)
+    if _failed:
+        print("WARNING: could not install:", _failed)
 
     def _build(path, label):
         """Build one CUDA extension. Plain first; one retry with a logged nvcc flag."""
@@ -417,6 +458,7 @@ def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
     # TIGRE Python package (pyproject.toml is at the repo root at this commit).
     pip_install([str(TIGRE_DIR)], env=_env)
     build_info["tigre"] = "plain"
+    build_info["pip_failed"] = _failed
     build_info["build_minutes"] = round((time.time() - _t0) / 60, 1)
     print(build_info)
     return (build_info,)

@@ -32,6 +32,7 @@ docs/papers on Sep 29, 2026, unless marked UNVERIFIED.
 | src/flowsplat/setup_check.py:parse_r2g_eval_yml, parse_r2g_stdout | R2G code | train.py, evaluation block (eval3d.yml, eval2d_*.yml, "[ITER n] Evaluating" line) | Output format | Parsing only |
 | src/flowsplat/setup_check.py:parse_4drgs_log | 4DRGS code | test.py, log_message (logs.txt) | Output format | Parsing only |
 | src/flowsplat/setup_check.py:cube_center_ray_integral | R2G | Sec 3.1, Eq 1 | Line integral, closed form for a uniform cube | Used as the TIGRE sanity value |
+| src/flowsplat/setup_check.py:find_pip_cuda_home, prepare_pip_cuda_home; notebooks/step0_setup.py (environment cell) | Ref: OURS | PyPI `cuda-toolkit` 13.0.2 extras; file lists of wheels nvidia_cuda_nvcc-13.0.88 and nvidia_cuda_runtime-13.0.96 | Tooling: CUDA compiler from pip when the image has no nvcc; prefix `nvidia/cu13` used as CUDA_HOME | Symlinks for linker names and `lib64` added inside the pip prefix. Not part of the method |
 | src/flowsplat/setup_check.py:compare_psnr | Ref: OURS | Step 0.1 verification rule | Pass if abs(ours - expected) <= 1 dB | Tolerance chosen by the project owner |
 | src/flowsplat/setup_check.py:scrub, git_auth_env; notebooks/step0_setup.py:sh, pip_install, clone_pinned, source_untouched | Ref: OURS | git-config ENVIRONMENT (GIT_CONFIG_COUNT), section number UNVERIFIED | Tooling: token passed as HTTP header, never stored or printed | Not part of the method |
 | **4DRGS** | | | | |
