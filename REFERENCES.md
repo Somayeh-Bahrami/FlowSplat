@@ -10,11 +10,11 @@ docs/papers on Sep 29, 2026, unless marked UNVERIFIED.
 
 | Key | Paper | Code |
 |---|---|---|
-| 4DRGS | Liu, Zha, Zhao, Li, Cui. 4DRGS: 4D Radiative Gaussian Splatting for Efficient 3D Vessel Reconstruction from Sparse-View Dynamic DSA Images. MICCAI 2025. arXiv:2412.12919v2 | No code link in the PDF. Availability UNVERIFIED (check in Step 0.1) |
-| R2G | Zha et al. R2-Gaussian: Rectifying Radiative Gaussian Splatting for Tomographic Reconstruction. NeurIPS 2024. arXiv:2405.20693 | No link found in extracted PDF text. Repo URL UNVERIFIED |
+| 4DRGS | Liu, Zha, Zhao, Li, Cui. 4DRGS: 4D Radiative Gaussian Splatting for Efficient 3D Vessel Reconstruction from Sparse-View Dynamic DSA Images. IPMI 2025 (Oral), per the official repo README and BibTeX (this table said MICCAI 2025 before Oct 1; corrected). arXiv:2412.12919v2 | https://github.com/ShanghaiTech-IMPACT/4DRGS (public, checked Oct 1, 2026; pinned commit 38006edbb105b363ae2ed6b075e1766ec70a91dc). Example data: case2 linked in its README |
+| R2G | Zha et al. R2-Gaussian: Rectifying Radiative Gaussian Splatting for Tomographic Reconstruction. NeurIPS 2024. arXiv:2405.20693 | https://github.com/Ruyi-Zha/r2_gaussian (official, checked Oct 1, 2026; pinned commit f2579bfddd9aac009cb797c8503bef8119bbd022) |
 | PUNCH | Thakur et al. PUNCH: Physics-informed Uncertainty-aware Network for Coronary Hemodynamics. arXiv:2601.17192, 2026 | No code link in the PDF |
 | TOGS | Zhang et al. TOGS: Gaussian Splatting with Temporal Opacity Offset for Real-Time 4D DSA Rendering. IEEE JBHI 2025. arXiv:2403.19586 | https://github.com/hustvl/TOGS (stated in abstract) |
-| TIGRE | Biguri et al. TIGRE: a MATLAB-GPU toolbox for CBCT image reconstruction. Biomed. Phys. Eng. Express, 2016 | PDF not in docs/papers; sections UNVERIFIED |
+| TIGRE | Biguri et al. TIGRE: a MATLAB-GPU toolbox for CBCT image reconstruction. Biomed. Phys. Eng. Express, 2016 | https://github.com/CERN/TIGRE (official; pinned commit 6b0951a8a88aa88a7db5b2a95181a33a95aa8b28, master, v3.1.3 line). PDF not in docs/papers; sections UNVERIFIED |
 | ImageCAS | Zeng et al. ImageCAS: A large-scale dataset and benchmark for coronary artery segmentation. CMIG, 2023 | PDF not in docs/papers; sections UNVERIFIED |
 | YoungTsai | Young, Tsai. Flow characteristics in models of arterial stenoses. J Biomech, 1973 | Citation UNVERIFIED (flagged in plan) |
 | Murray | Murray. The physiological principle of minimum work. PNAS, 1926 | Citation UNVERIFIED (flagged in plan) |
@@ -23,6 +23,17 @@ docs/papers on Sep 29, 2026, unless marked UNVERIFIED.
 
 | Code location | Paper | Section / equation | What we took | What we changed |
 |---|---|---|---|---|
+| **Step 0.1 setup (repos and tooling)** | | | | |
+| notebooks/step0_setup.py (clone, build, train cells) | R2G code, https://github.com/Ruyi-Zha/r2_gaussian @ f2579bfddd9aac009cb797c8503bef8119bbd022 | README Sec 1 (pip install path), Sec 2 (dataset link), Sec 3.2 (`python train.py -s XXX/0_chest_cone`) | Official code, CUDA rasterizer + voxelizer, simple-knn, default training settings (30k iters), example case 0_chest_cone (50 views) | No source change. Newer python / torch / CUDA than the README; requirements installed unpinned; TIGRE v3.1.x instead of v2.3 (all logged in results/step0.1.json) |
+| notebooks/step0_setup.py (R2G_EXPECTED) | R2G code and paper | Repo assets/results.md, table "Synthetic dataset", row Chest, column R2-Gaussian (50-view): PSNR3D 35.09. Paper Table 1, synthetic, 50-view, Ours (iter=30k): PSNR 37.98, SSIM 0.952 (15-case average) | Expected values for the reproduction check | No per-case SSIM is published, so SSIM is compared with the dataset average only |
+| notebooks/step0_setup.py (TIGRE cell) | TIGRE code, https://github.com/CERN/TIGRE @ 6b0951a8a88aa88a7db5b2a95181a33a95aa8b28 | Python package: tigre.geometry(default=True), tigre.Ax. Demo file UNVERIFIED | Cone-beam forward projector; also used by R2G for FDK init | No source change |
+| notebooks/step0_setup.py (4DRGS cell) | 4DRGS code, https://github.com/ShanghaiTech-IMPACT/4DRGS @ 38006edbb105b363ae2ed6b075e1766ec70a91dc | README "Setup", "Data-Preparation" (case2), "Training" (fast version: 10k iters, ADC until 5k), table "Sort-free X-ray rasterization" (Eval PSNR 36.349, SSIM 0.9021) | Official code and example case, used for the plan bullet "run it on one case" and later baseline 1 | No source change. `--fdk_toolbox=tigre` instead of default `leap`; test with `--render_2d` only |
+| notebooks/step0_setup.py (4DRGS cell) | tiny-cuda-nn, https://github.com/NVlabs/tiny-cuda-nn @ 3daa6e5b8b8e0fa17971a1a20acfbb3754494b38 | 4DRGS README "Setup" | Hash-encoding dependency of 4DRGS | None |
+| src/flowsplat/setup_check.py:parse_r2g_eval_yml, parse_r2g_stdout | R2G code | train.py, evaluation block (eval3d.yml, eval2d_*.yml, "[ITER n] Evaluating" line) | Output format | Parsing only |
+| src/flowsplat/setup_check.py:parse_4drgs_log | 4DRGS code | test.py, log_message (logs.txt) | Output format | Parsing only |
+| src/flowsplat/setup_check.py:cube_center_ray_integral | R2G | Sec 3.1, Eq 1 | Line integral, closed form for a uniform cube | Used as the TIGRE sanity value |
+| src/flowsplat/setup_check.py:compare_psnr | Ref: OURS | Step 0.1 verification rule | Pass if abs(ours - expected) <= 1 dB | Tolerance chosen by the project owner |
+| src/flowsplat/setup_check.py:scrub, git_auth_env; notebooks/step0_setup.py:sh, pip_install, clone_pinned, source_untouched | Ref: OURS | git-config ENVIRONMENT (GIT_CONFIG_COUNT), section number UNVERIFIED | Tooling: token passed as HTTP header, never stored or printed | Not part of the method |
 | **4DRGS** | | | | |
 | render_tigre.py (planned) | 4DRGS | Sec 2 "DSA Imaging" | Log-subtracted DSA: I_j = ln(I^m_j) - ln(I^f_j) | Synthetic: we render the contrast-only volume directly, so no mask/fill pair is simulated |
 | render_tigre.py, data split (planned) | 4DRGS | Sec 2 "Sparse-View DSA Reconstruction" | Timestamps t_j = j/T; uniform view subset j_k = floor((k-1) T/N) + 1 | Timestamps in seconds (needed for Q), not normalized order |
