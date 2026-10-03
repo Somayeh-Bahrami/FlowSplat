@@ -195,3 +195,116 @@ def prepare_pip_cuda_home(cuda_home) -> list:
             if f.is_file():
                 f.chmod(f.stat().st_mode | 0o111)
     return created
+
+
+def nvcc_release(version_text: str | None) -> str | None:
+    """CUDA release ("13.0") from the output of `nvcc --version`, or None.
+
+    Ref: OURS (tooling). nvcc prints a line like
+    "Cuda compilation tools, release 13.0, V13.0.88".
+    """
+    m = re.search(r"release (\d+\.\d+)", version_text or "")
+    return m.group(1) if m else None
+
+
+def same_cuda(a: str | None, b: str | None) -> bool:
+    """True when two CUDA versions agree on major.minor ("13.0" vs "13.0.88").
+
+    Ref: OURS (tooling). Used so every extension is built with the CUDA
+    version torch was built with.
+    """
+    if not a or not b:
+        return False
+    return a.split(".")[:2] == b.split(".")[:2]
+
+
+def pip_cuda_specs(torch_cuda: str) -> list:
+    """pip requirement strings for an nvcc toolkit matching torch's CUDA.
+
+    CUDA 13: the `cuda-toolkit` metapackage with extras (all into
+    nvidia/cu13). CUDA 12: the per-component `-cu12` wheels (each into its
+    own nvidia/<component> folder).
+
+    Ref: OURS (tooling). Package names from PyPI: cuda-toolkit 13.0.2 extras;
+    nvidia-cuda-nvcc-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-cccl-cu12
+    (12.8 file layout UNVERIFIED, checked on molab at run time).
+    """
+    major_minor = ".".join(torch_cuda.split(".")[:2])
+    if int(major_minor.split(".")[0]) >= 13:
+        return [f"cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]=={major_minor}.*"]
+    return [
+        f"nvidia-cuda-nvcc-cu12=={major_minor}.*",
+        f"nvidia-cuda-runtime-cu12=={major_minor}.*",
+        f"nvidia-cuda-cccl-cu12=={major_minor}.*",
+    ]
+
+
+def find_pip_cuda12_prefixes(site_dirs) -> list:
+    """All per-component CUDA 12 wheel folders, <site>/nvidia/<name>.
+
+    Folders named like a CUDA 13 unified prefix (cu13, ...) are skipped so a
+    leftover CUDA 13 install is never mixed in.
+
+    Ref: OURS (tooling).
+    """
+    prefixes = []
+    for site in site_dirs:
+        base = Path(site) / "nvidia"
+        if not base.is_dir():
+            continue
+        for p in sorted(base.iterdir()):
+            if p.is_dir() and not re.fullmatch(r"cu\d+", p.name) and p not in prefixes:
+                prefixes.append(p)
+    return prefixes
+
+
+def merge_cuda_prefixes(prefixes, dest) -> Path:
+    """Build one CUDA_HOME from several pip prefixes with a symlink tree.
+
+    For each prefix, every entry of bin/, include/, lib/ and nvvm/ is linked
+    into the same subfolder of `dest` (first prefix wins on a name clash).
+    Nothing inside site-packages is changed.
+
+    Ref: OURS (tooling). Needed because the CUDA 12 wheels unpack into
+    separate folders while setup.py builds expect a single CUDA_HOME.
+    """
+    dest = Path(dest)
+    for prefix in prefixes:
+        for sub in ("bin", "include", "lib", "nvvm"):
+            src = Path(prefix) / sub
+            if not src.is_dir():
+                continue
+            (dest / sub).mkdir(parents=True, exist_ok=True)
+            for entry in sorted(src.iterdir()):
+                link = dest / sub / entry.name
+                if not link.exists() and not link.is_symlink():
+                    os.symlink(entry, link)
+    return dest
+
+
+def find_include_dir(roots, header: str = "cub/cub.cuh") -> Path | None:
+    """Directory D such that D/<header> exists, searched under each root.
+
+    CUDA 13 moved the CCCL headers (cub, thrust, libcu++) from include/ to
+    include/cccl/, so `#include <cub/cub.cuh>` no longer resolves with only
+    CUDA_HOME/include on the path. Returns the shallowest match in the first
+    root that has one, or None.
+
+    Ref: OURS (tooling). CUDA 13 layout: NVIDIA CUDA 13.0 release notes, CCCL
+    header location change (section UNVERIFIED).
+    """
+    parts = Path(header).parts
+    for root in roots:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        # Known spots first (these also work through symlinked folders,
+        # which rglob does not descend into).
+        for cand in (root / "include", root / "include" / "cccl", root):
+            if (cand / header).exists():
+                return cand
+        hits = [p for p in root.rglob(parts[-1]) if p.parts[-len(parts):] == parts]
+        if hits:
+            best = min(hits, key=lambda p: len(p.parts))
+            return Path(*best.parts[: -len(parts)])
+    return None

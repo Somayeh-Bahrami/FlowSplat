@@ -5,7 +5,13 @@
 #      password field (never hardcoded, never printed)
 #   b) use the FlowSplat repo this notebook already sits in (bootstrap case);
 #      only if it is not inside the repo, clone or pull it
-#   c) print torch / CUDA / GPU / compute capability
+#   c) print torch / CUDA / GPU / compute capability; pick ONE CUDA_HOME whose
+#      nvcc matches torch's CUDA version; install ninja
+#      Option A: image torch (CUDA 13) + pinned CUDA 13 pip toolkit + CCCL
+#      include flag. Option B (automatic if an A build fails): torch cu128 +
+#      CUDA 12.8 pip toolkit; saved in WORK/cuda_option.json, script restarts
+#      itself (in marimo: restart the kernel). Delete that file or set
+#      FLOWSPLAT_CUDA_OPTION=A to retry A.
 #   d) clone the OFFICIAL repos, each pinned to a commit hash
 #   e) install and build them for this GPU (CUDA extensions included)
 #   f) run R2-Gaussian on its own example case, print PSNR / SSIM vs published
@@ -176,6 +182,15 @@ def _(os, shutil, subprocess, sys):
             raise RuntimeError("Neither pip nor uv is available in this environment.")
         return sh(cmd, cwd=cwd, env=env, check=check)
 
+    def pip_uninstall(names):
+        """Uninstall packages from the notebook's interpreter (uv if pip is missing).
+
+        Ref: OURS (tooling). Used only for the Option B torch switch.
+        """
+        if subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0:
+            return sh([sys.executable, "-m", "pip", "uninstall", "-y", *names], check=False)
+        return sh(["uv", "pip", "uninstall", "--python", sys.executable, *names], check=False)
+
     def clone_pinned(url, commit, dest, env=None, secret=None):
         """Clone `url` into `dest` and check out exactly `commit` (with submodules).
 
@@ -205,7 +220,7 @@ def _(os, shutil, subprocess, sys):
         ).returncode == 0
         return a and b
 
-    return clone_pinned, pip_install, sh, source_untouched
+    return clone_pinned, pip_install, pip_uninstall, sh, source_untouched
 
 
 @app.cell
@@ -267,61 +282,126 @@ def _(AUTORUN, FLOWSPLAT_URL, Path, WORK, mo, os, run_btn, sh, sys, token_box):
 
 
 @app.cell
-def _(flowsplat_commit, os, pip_install, setup_check, shutil, subprocess, sys):
-    # c) torch version, CUDA version, GPU name, compute capability.
+def _(WORK, flowsplat_commit, json, os, pip_install, pip_uninstall, setup_check, shutil, subprocess, sys):
+    # c) torch version, CUDA version, GPU name, compute capability, and ONE
+    # CUDA_HOME whose nvcc has the same CUDA version as torch.
+    #
+    # Option A (default): keep the image's torch; nvcc toolkit pinned to
+    #   torch's CUDA; CCCL include dir added as a build flag.
+    # Option B (automatic, only if an Option A build fails): torch +
+    #   torchvision cu128 wheels and the CUDA 12.8 pip toolkit. Blackwell
+    #   (sm_120) is supported from CUDA 12.8. The choice is kept in
+    #   WORK/cuda_option.json so it survives the restart that the torch
+    #   switch needs. FLOWSPLAT_CUDA_OPTION=A|B overrides it.
+    import site as _site
+    import sysconfig as _sysconfig
+
     deviations = []
+    CUDA_OPTION_FILE = WORK / "cuda_option.json"
+    _saved = json.loads(CUDA_OPTION_FILE.read_text()) if CUDA_OPTION_FILE.exists() else {}
+    CUDA_OPTION = os.environ.get("FLOWSPLAT_CUDA_OPTION") or _saved.get("option", "A")
+    _B_TORCH_CUDA = "12.8"
+    _B_INDEX = "https://download.pytorch.org/whl/cu128"
+
+    if CUDA_OPTION == "B":
+        # torch must be switched before it is imported in this process.
+        _current = None
+        try:
+            import importlib.metadata as _md
+
+            _current = _md.version("torch")
+        except Exception:
+            pass
+        if _current is None or "+cu128" not in _current:
+            pip_uninstall(["torch", "torchvision"])
+            pip_install(["torch", "torchvision", "--index-url", _B_INDEX])
     try:
         import torch
     except ImportError:
         # Blackwell (sm_120) needs a recent wheel built against CUDA 12.8.
-        pip_install(["torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/cu128"])
+        pip_install(["torch", "torchvision", "--index-url", _B_INDEX])
         import torch
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available to torch. Apply the Step 0.1 fallback (another cloud GPU).")
+    if CUDA_OPTION == "B" and not setup_check.same_cuda(torch.version.cuda, _B_TORCH_CUDA):
+        raise RuntimeError(f"Option B expected torch with CUDA {_B_TORCH_CUDA}, got {torch.version.cuda}.")
+    if CUDA_OPTION == "B":
+        deviations.append(
+            {
+                "what": f"Option B: torch {torch.__version__} + torchvision from {_B_INDEX}, CUDA {_B_TORCH_CUDA} pip toolkit",
+                "instead_of": "the image's torch (CUDA 13) with a CUDA 13 toolkit (Option A)",
+                "reason": "Option A build failed: " + str(_saved.get("reason", "forced by FLOWSPLAT_CUDA_OPTION"))[:300]
+                + ". Blackwell sm_120 is supported in CUDA 12.8. No source change.",
+            }
+        )
 
     _cap = torch.cuda.get_device_capability(0)
     _arch = f"sm_{_cap[0]}{_cap[1]}"
-    _nvcc = shutil.which("nvcc")
-    for _home in [os.environ.get("CUDA_HOME"), os.environ.get("CUDA_PATH"), "/usr/local/cuda"]:
-        if not _nvcc and _home and os.path.exists(os.path.join(_home, "bin", "nvcc")):
-            _nvcc = os.path.join(_home, "bin", "nvcc")
-
-    _toolkit_source = "system"
-    if _nvcc is None:
-        # No system CUDA toolkit (molab image). torch's own CUDA libraries come
-        # from NVIDIA's pip wheels (`cuda-toolkit`), so the matching compiler is
-        # installed the same way: nvcc, nvvm, crt, CCCL (thrust) and cudart
-        # headers, all into <site-packages>/nvidia/cuXX.
-        import importlib.metadata as _md
-        import site as _site
-        import sysconfig as _sysconfig
-
-        try:
-            _spec = "cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]==" + _md.version("cuda-toolkit")
-        except _md.PackageNotFoundError:
-            _spec = f"cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]=={torch.version.cuda}.*"
-        pip_install([_spec])
-        _sites = [_sysconfig.get_paths()["purelib"], _sysconfig.get_paths()["platlib"], *_site.getsitepackages()]
-        _home = setup_check.find_pip_cuda_home(_sites)
-        if _home is not None:
-            _links = setup_check.prepare_pip_cuda_home(_home)
-            _nvcc = str(_home / "bin" / "nvcc")
-            _toolkit_source = f"pip ({_spec})"
-            deviations.append(
-                {
-                    "what": f"CUDA compiler installed from pip: {_spec}; CUDA_HOME = {_home}",
-                    "instead_of": "a system CUDA toolkit, as the READMEs assume",
-                    "reason": "The molab image has no nvcc. Same CUDA version as the installed torch build. "
-                    f"Symlinks added inside the pip prefix for the linker: {len(_links)}. No source change.",
-                }
-            )
+    _torch_cuda = torch.version.cuda
 
     def _run(cmd):
         try:
             return subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
         except OSError:
             return None
+
+    def _nvcc_ok(path):
+        """True when `path` is an nvcc whose release equals torch's CUDA. Ref: OURS (tooling)."""
+        return bool(path) and os.path.exists(path) and setup_check.same_cuda(
+            setup_check.nvcc_release(_run([path, "--version"])), _torch_cuda
+        )
+
+    # 1) A system toolkit is used only if its version matches torch exactly.
+    _nvcc = None
+    _rejected = []
+    for _cand in [
+        shutil.which("nvcc"),
+        *[os.path.join(h, "bin", "nvcc") for h in [os.environ.get("CUDA_HOME"), os.environ.get("CUDA_PATH"), "/usr/local/cuda"] if h],
+    ]:
+        if _cand and os.path.exists(_cand):
+            if _nvcc_ok(_cand) and "site-packages" not in _cand:
+                _nvcc = _cand
+                break
+            _rejected.append(f"{_cand} ({setup_check.nvcc_release(_run([_cand, '--version']))})")
+    _toolkit_source = "system"
+
+    # 2) Otherwise the toolkit comes from NVIDIA's pip wheels, pinned to torch's
+    # CUDA version, into this interpreter's site-packages.
+    if _nvcc is None:
+        _specs = setup_check.pip_cuda_specs(_torch_cuda)
+        pip_install(_specs)
+        _sites = [_sysconfig.get_paths()["purelib"], _sysconfig.get_paths()["platlib"], *_site.getsitepackages()]
+        if int(_torch_cuda.split(".")[0]) >= 13:
+            _home = setup_check.find_pip_cuda_home(_sites)
+        else:
+            _home = setup_check.merge_cuda_prefixes(
+                setup_check.find_pip_cuda12_prefixes(_sites), WORK / f"cuda-{_torch_cuda}"
+            )
+        if _home is not None and (_home / "bin" / "nvcc").exists():
+            _links = setup_check.prepare_pip_cuda_home(_home)
+            _nvcc = str(_home / "bin" / "nvcc")
+            _toolkit_source = f"pip ({', '.join(_specs)})"
+            deviations.append(
+                {
+                    "what": f"CUDA compiler installed from pip: {', '.join(_specs)}; CUDA_HOME = {_home}",
+                    "instead_of": "a system CUDA toolkit, as the READMEs assume",
+                    "reason": "The molab image has no matching nvcc. Pinned to the CUDA version of the installed torch "
+                    f"({_torch_cuda}); rejected: {_rejected or 'none'}. "
+                    f"Symlinks added for the linker: {len(_links)}. No source change.",
+                }
+            )
+    if _nvcc is not None and not _nvcc_ok(_nvcc):
+        raise RuntimeError(
+            f"nvcc at {_nvcc} reports CUDA {setup_check.nvcc_release(_run([_nvcc, '--version']))}, "
+            f"torch was built with {_torch_cuda}. One CUDA version must be used for every build."
+        )
+
+    # 3) ninja, so torch's cpp_extension builds in parallel instead of falling
+    # back to the slow distutils path.
+    pip_install(["ninja"])
+    _scripts = _sysconfig.get_paths()["scripts"]
+    os.environ["PATH"] = _scripts + os.pathsep + os.environ.get("PATH", "")
 
     env_info = {
         "flowsplat_commit": flowsplat_commit,
@@ -335,8 +415,11 @@ def _(flowsplat_commit, os, pip_install, setup_check, shutil, subprocess, sys):
         "torch_supports_gpu_arch": _arch in torch.cuda.get_arch_list(),
         "gpu_memory_gb": round(torch.cuda.get_device_properties(0).total_memory / 2**30, 1),
         "driver": _run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"]),
+        "cuda_option": CUDA_OPTION,
         "nvcc_path": _nvcc,
+        "nvcc_rejected": _rejected,
         "cuda_toolkit_source": _toolkit_source,
+        "ninja": _run(["ninja", "--version"]),
         "nvcc_version": _run([_nvcc, "--version"]).splitlines()[-2:] if _nvcc else None,
         "gcc": (_run(["gcc", "--version"]) or "").splitlines()[:1],
     }
@@ -348,9 +431,28 @@ def _(flowsplat_commit, os, pip_install, setup_check, shutil, subprocess, sys):
             "The CUDA extensions cannot be built. Apply the Step 0.1 fallback (another cloud GPU)."
         )
     CUDA_HOME = os.path.dirname(os.path.dirname(_nvcc))
-    # Build scripts look for nvcc on PATH (tiny-cuda-nn) and for CUDA_HOME (torch, TIGRE).
-    os.environ["CUDA_HOME"] = CUDA_HOME
-    os.environ["CUDA_PATH"] = CUDA_HOME
+    # ONE environment for every CUDA build below (R2-Gaussian, TIGRE,
+    # tiny-cuda-nn, 4DRGS). Build scripts look for nvcc on PATH (tiny-cuda-nn)
+    # and for CUDA_HOME (torch, TIGRE).
+    CUDA_ENV = {"CUDA_HOME": CUDA_HOME, "CUDA_PATH": CUDA_HOME}
+    # CUDA 13 keeps cub / thrust under include/cccl. If that is not already
+    # CUDA_HOME/include, add it to the include path for gcc (CPATH) and nvcc.
+    _cccl = setup_check.find_include_dir([CUDA_HOME, os.path.join(_sysconfig.get_paths()["platlib"], "nvidia")])
+    if _cccl is None:
+        print("WARNING: cub/cub.cuh not found under", CUDA_HOME)
+    elif os.path.realpath(_cccl) != os.path.realpath(os.path.join(CUDA_HOME, "include")):
+        CUDA_ENV["CPATH"] = str(_cccl) + (os.pathsep + os.environ["CPATH"] if os.environ.get("CPATH") else "")
+        CUDA_ENV["NVCC_APPEND_FLAGS"] = f"-I{_cccl}"
+        deviations.append(
+            {
+                "what": f"CCCL include dir added as a build flag: CPATH and NVCC_APPEND_FLAGS='-I{_cccl}'",
+                "instead_of": "plain build (cub/cub.cuh found under CUDA_HOME/include, CUDA 12 layout)",
+                "reason": "CUDA 13 moved cub/thrust to include/cccl; simple-knn failed with "
+                "'cub/cub.cuh: No such file or directory'. Build flag only; source untouched.",
+            }
+        )
+    env_info["cccl_include"] = str(_cccl) if _cccl else None
+    os.environ.update(CUDA_ENV)
     os.environ["PATH"] = os.path.join(CUDA_HOME, "bin") + os.pathsep + os.environ.get("PATH", "")
     deviations.append(
         {
@@ -360,7 +462,7 @@ def _(flowsplat_commit, os, pip_install, setup_check, shutil, subprocess, sys):
             "requirements.txt is not installed with its pins; the same packages are installed unpinned. No source change.",
         }
     )
-    return CUDA_HOME, deviations, env_info, torch
+    return CUDA_ENV, CUDA_OPTION, CUDA_OPTION_FILE, deviations, env_info, torch
 
 
 @app.cell
@@ -406,11 +508,25 @@ def _(
 
 
 @app.cell
-def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
+def _(
+    CUDA_ENV,
+    CUDA_OPTION,
+    CUDA_OPTION_FILE,
+    R2G_DIR,
+    TIGRE_DIR,
+    deviations,
+    json,
+    mo,
+    os,
+    pins,
+    pip_install,
+    sys,
+    time,
+):
     # e) Install and build R2-Gaussian and TIGRE for this GPU.
     _ = pins
     _t0 = time.time()
-    _env = {"CUDA_HOME": CUDA_HOME, "CUDA_PATH": CUDA_HOME}
+    _env = dict(CUDA_ENV)  # the one CUDA environment from cell c
 
     # Same packages as r2_gaussian/requirements.txt and environment.yml, unpinned.
     # Installed one by one so that a package without a wheel for this Python
@@ -436,7 +552,7 @@ def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
             "4DRGS submodules) installed with `pip install --no-build-isolation`",
             "instead_of": "plain `pip install` from the READMEs",
             "reason": "Isolated build env has no torch: ModuleNotFoundError at the simple-knn build "
-            "(molab, Oct 2). Builds against the installed torch 2.11.0+cu130. Build flag only; source untouched.",
+            "(molab, Oct 2). Builds against the installed torch. Build flag only; source untouched.",
         }
     )
 
@@ -450,7 +566,8 @@ def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
             # no file of the repo is edited. Needed when a newer GCC no longer
             # pulls in <cfloat> / <cstdint> implicitly.
             _flags = "-include cfloat -include cstdint"
-            pip_install(["--no-build-isolation", "-e", str(path)], env={**_env, "NVCC_APPEND_FLAGS": _flags})
+            _append = (_env.get("NVCC_APPEND_FLAGS", "") + " " + _flags).strip()
+            pip_install(["--no-build-isolation", "-e", str(path)], env={**_env, "NVCC_APPEND_FLAGS": _append})
             deviations.append(
                 {
                     "what": f"{label}: built with NVCC_APPEND_FLAGS='{_flags}'",
@@ -460,16 +577,44 @@ def _(CUDA_HOME, R2G_DIR, TIGRE_DIR, deviations, pins, pip_install, time):
             )
             return "nvcc_append_flags"
 
-    build_info = {
-        "simple_knn": _build(R2G_DIR / "r2_gaussian" / "submodules" / "simple-knn", "simple-knn"),
-        "xray_rasterizer_voxelizer": _build(
-            R2G_DIR / "r2_gaussian" / "submodules" / "xray-gaussian-rasterization-voxelization",
-            "xray-gaussian-rasterization-voxelization",
-        ),
-    }
-    # TIGRE Python package (pyproject.toml is at the repo root at this commit).
-    pip_install(["--no-build-isolation", str(TIGRE_DIR)], env=_env)
-    build_info["tigre"] = "plain"
+    try:
+        build_info = {
+            "cuda_option": CUDA_OPTION,
+            "simple_knn": _build(R2G_DIR / "r2_gaussian" / "submodules" / "simple-knn", "simple-knn"),
+            "xray_rasterizer_voxelizer": _build(
+                R2G_DIR / "r2_gaussian" / "submodules" / "xray-gaussian-rasterization-voxelization",
+                "xray-gaussian-rasterization-voxelization",
+            ),
+        }
+        # TIGRE Python package (pyproject.toml is at the repo root at this commit).
+        pip_install(["--no-build-isolation", str(TIGRE_DIR)], env=_env)
+        build_info["tigre"] = "plain"
+    except RuntimeError as _e:
+        if CUDA_OPTION == "B":
+            raise RuntimeError(
+                "Option B (torch cu128 + CUDA 12.8) build failed too. Plan fallback: \"If the CUDA rasterizer "
+                "will not build: another cloud GPU. If nothing works by Oct 4: plain PyTorch Gaussian splatter "
+                "(slower, no custom CUDA). Do not change the project.\""
+            ) from _e
+        # Option A failed: switch to Option B. torch cannot be swapped inside a
+        # running process, so the choice is saved and the run restarts.
+        CUDA_OPTION_FILE.write_text(
+            json.dumps(
+                {
+                    "option": "B",
+                    "reason": f"Option A build failed ({_e}); see the build log above",
+                    "date_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }
+            )
+        )
+        print(f"\n=== Option A build failed. Saved Option B to {CUDA_OPTION_FILE}. ===")
+        if mo.app_meta().mode == "script":
+            print("Restarting the script with Option B (torch cu128 + CUDA 12.8 toolkit).", flush=True)
+            sys.stdout.flush()
+            os.execv(sys.executable, [sys.executable, *sys.argv])
+        raise RuntimeError(
+            "Option A build failed; Option B is saved. Restart the marimo kernel and press Run again."
+        ) from _e
     build_info["pip_failed"] = _failed
     build_info["build_minutes"] = round((time.time() - _t0) / 60, 1)
     print(build_info)
@@ -581,7 +726,7 @@ def _(r2g_result, setup_check, time, torch):
 
 @app.cell
 def _(
-    CUDA_HOME,
+    CUDA_ENV,
     DRGS_DATA_URL,
     DRGS_DIR,
     DRGS_EXPECTED,
@@ -603,7 +748,7 @@ def _(
     drgs_result = {"ran": False}
     if run_4drgs.value:
         try:
-            _env = {"CUDA_HOME": CUDA_HOME, "CUDA_PATH": CUDA_HOME}
+            _env = dict(CUDA_ENV)  # same CUDA environment as the R2-Gaussian builds
             pip_install(["pyhocon", "PyMCubes", "pymeshlab"])
             pip_install(["--no-build-isolation", str(TCNN_DIR / "bindings" / "torch")], env=_env)
             for _sub in [

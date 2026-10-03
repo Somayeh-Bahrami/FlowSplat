@@ -113,3 +113,91 @@ def test_find_and_prepare_pip_cuda_home(tmp_path):
     assert len(created) == 2
     assert (home / "bin" / "nvcc").stat().st_mode & 0o111
     assert sc.prepare_pip_cuda_home(home) == []  # second call changes nothing
+
+
+def test_nvcc_release_and_same_cuda():
+    text = "nvcc: NVIDIA (R) Cuda compiler driver\nCuda compilation tools, release 13.3, V13.3.12\n"
+    assert sc.nvcc_release(text) == "13.3"
+    assert sc.nvcc_release(None) is None
+    assert not sc.same_cuda("13.3", "13.0")
+    assert sc.same_cuda("13.0", "13.0.88")
+    assert sc.same_cuda("12.8", "12.8")
+    assert not sc.same_cuda(None, "13.0")
+
+
+def test_pip_cuda_specs_pins_torch_version():
+    assert sc.pip_cuda_specs("13.0") == ["cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]==13.0.*"]
+    specs = sc.pip_cuda_specs("12.8")
+    assert all(s.endswith("==12.8.*") and "-cu12" in s for s in specs)
+    assert any(s.startswith("nvidia-cuda-cccl-cu12") for s in specs)
+
+
+def test_find_include_dir_cuda13_cccl_layout(tmp_path):
+    home = tmp_path / "nvidia" / "cu13"
+    (home / "include" / "cccl" / "cub").mkdir(parents=True)
+    (home / "include" / "cccl" / "cub" / "cub.cuh").write_text("")
+    (home / "include" / "cccl" / "thrust").mkdir()
+    assert sc.find_include_dir([tmp_path / "missing", home]) == home / "include" / "cccl"
+    assert sc.find_include_dir([home], "nothere/x.h") is None
+
+
+def test_merge_cuda12_prefixes(tmp_path):
+    site = tmp_path / "site"
+    for name, sub, f in [
+        ("cuda_nvcc", "bin", "nvcc"),
+        ("cuda_nvcc", "nvvm", "libdevice"),
+        ("cuda_runtime", "include", "cuda_runtime.h"),
+        ("cuda_runtime", "lib", "libcudart.so.12"),
+        ("cuda_cccl", "include", "cub"),
+        ("cu13", "bin", "nvcc"),
+    ]:
+        (site / "nvidia" / name / sub).mkdir(parents=True, exist_ok=True)
+        (site / "nvidia" / name / sub / f).write_text("")
+    prefixes = sc.find_pip_cuda12_prefixes([site])
+    assert [p.name for p in prefixes] == ["cuda_cccl", "cuda_nvcc", "cuda_runtime"]
+    home = sc.merge_cuda_prefixes(prefixes, tmp_path / "cuda-12.8")
+    for rel in ["bin/nvcc", "nvvm/libdevice", "include/cuda_runtime.h", "include/cub", "lib/libcudart.so.12"]:
+        assert (home / rel).exists(), rel
+    links = sc.prepare_pip_cuda_home(home)
+    assert (home / "lib" / "libcudart.so").exists() and (home / "lib64").exists()
+    assert len(links) == 2
+    sc.merge_cuda_prefixes(prefixes, home)  # idempotent
+
+
+def test_find_include_dir_through_symlinked_cccl(tmp_path):
+    real = tmp_path / "site" / "nvidia" / "cuda_cccl" / "include" / "cub"
+    real.mkdir(parents=True)
+    (real / "cub.cuh").write_text("")
+    home = sc.merge_cuda_prefixes([real.parent.parent], tmp_path / "cuda-12.8")
+    assert sc.find_include_dir([home]) == home / "include"
+
+
+def test_notebook_cell_wiring():
+    """Every marimo cell input is returned by exactly one cell, and every
+    cross-cell name a cell reads is one of its inputs (marimo is not installed
+    on the M4, so this stands in for its dependency check)."""
+    tree = ast.parse((ROOT / "notebooks" / "step0_setup.py").read_text())
+    cells = [
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and any("app.cell" in ast.unparse(d) for d in n.decorator_list)
+    ]
+    returned = {}
+    for c in cells:
+        ret = c.body[-1]
+        if isinstance(ret, ast.Return) and ret.value is not None:
+            elts = ret.value.elts if isinstance(ret.value, ast.Tuple) else [ret.value]
+            for e in elts:
+                assert e.id not in returned, f"{e.id} returned by two cells"
+                returned[e.id] = c.lineno
+    for c in cells:
+        params = {a.arg for a in c.args.args}
+        assert params <= set(returned), f"cell at line {c.lineno}: undefined inputs {params - set(returned)}"
+        stored = {n.id for n in ast.walk(c) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+        stored |= {
+            (a.asname or a.name).split(".")[0]
+            for n in ast.walk(c) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names
+        }
+        stored |= {n.name for n in ast.walk(c) if isinstance(n, ast.FunctionDef) and n is not c}
+        loaded = {n.id for n in ast.walk(c) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+        missing = {x for x in loaded & set(returned) if x not in params and x not in stored}
+        assert not missing, f"cell at line {c.lineno} reads {missing} without taking them as inputs"

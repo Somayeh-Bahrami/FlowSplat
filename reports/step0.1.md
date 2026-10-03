@@ -73,7 +73,8 @@ Values from the first molab run on Oct 2, 2026 (repo at `d517294`).
 | Date | Problem | Action | Solved |
 |---|---|---|---|
 | Oct 2 | `nvcc not found`: the molab image has torch with pip CUDA libraries but no CUDA toolkit | Notebook now installs the matching compiler from NVIDIA's pip wheels, uses `<site-packages>/nvidia/cu13` as `CUDA_HOME`, and adds the linker symlinks (`libcudart.so`, `lib64`) inside that pip prefix | Yes (second run: nvcc 13.0 found, sm_120 supported) |
-| Oct 2 | simple-knn build: `ModuleNotFoundError: No module named 'torch'` inside pip's isolated build env (setup.py imports torch) | Every CUDA extension install (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, 4DRGS submodules) now uses `pip install --no-build-isolation`, so it builds against the installed torch 2.11.0+cu130. Build flag only | TODO (rerun pending). Time box ends Oct 4 |
+| Oct 2 | simple-knn build: `ModuleNotFoundError: No module named 'torch'` inside pip's isolated build env (setup.py imports torch) | Every CUDA extension install (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, 4DRGS submodules) now uses `pip install --no-build-isolation`, so it builds against the installed torch 2.11.0+cu130. Build flag only | Yes (third run: torch import fixed) |
+| Oct 2 | simple-knn: `cub/cub.cuh: No such file or directory`. Also: nvcc 13.3 used (pip prefix in /usr/local site-packages) while torch is cu130 (earlier run: nvcc 13.0 from /tmp/uv-venv); ninja missing | (1) ONE `CUDA_HOME` for every build, nvcc release must equal torch's CUDA (any other nvcc is rejected, pip toolkit pinned to `==<torch CUDA>.*`). (2) ninja installed. (3) Option A: CCCL dir (`include/cccl` in CUDA 13) found and added via `CPATH` and `NVCC_APPEND_FLAGS=-I...`. (4) Option B, automatic if any A build fails: torch + torchvision cu128 and CUDA 12.8 pip toolkit (nvcc, runtime, cccl), state in `WORK/cuda_option.json`, script restarts itself | TODO (rerun pending). Time box ends Oct 4 |
 
 ## R2-Gaussian reproduction (its own example case)
 
@@ -128,6 +129,9 @@ list comes from `deviations` in the JSON):
 | TIGRE at commit `6b0951a` (v3.1.3 line) | R2-Gaussian README: TIGRE v2.3 zip | Rule: pin the official repo to a commit; v3.1.x reads the GPU architectures from nvcc at build time |
 | CUDA compiler from pip (`cuda-toolkit` extras), `CUDA_HOME` inside site-packages, linker symlinks added there | A system CUDA toolkit | molab has no `nvcc`. Same CUDA version as torch. No repo file touched |
 | `pip install --no-build-isolation` for every CUDA extension (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, 4DRGS submodules) | Plain `pip install` / `pip install -e` | Isolated build env has no torch, so setup.py fails to import it. Build flag only; no source change |
+| One `CUDA_HOME` with nvcc pinned to torch's CUDA version; ninja installed | Whatever nvcc is on PATH | A 13.3 nvcc was picked up against torch cu130. Tooling only |
+| Option A: CCCL include dir (`<CUDA_HOME>/include/cccl`) via `CPATH` and `NVCC_APPEND_FLAGS=-I...` | Plain build | CUDA 13 moved cub/thrust to `include/cccl`. Build flag only. Used: TODO |
+| Option B (only if an A build fails): torch + torchvision cu128, CUDA 12.8 pip toolkit, merged into one `CUDA_HOME` by symlinks | Image torch 2.11.0+cu130 | Other CUDA 13 incompatibilities in the extensions. sm_120 is supported in 12.8. Used: TODO |
 | `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"`, only if the plain build fails | Plain `pip install -e` | Build flag only, for newer GCC. Used: TODO |
 | 4DRGS: `--fdk_toolbox=tigre`; test with `--render_2d` only | Default `leap`; README test also has `--render_fixview --VQR` | TIGRE is already built; CLI flags only. Whether the README numbers used LEAP or TIGRE is UNVERIFIED |
 
