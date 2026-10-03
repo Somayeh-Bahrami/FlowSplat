@@ -204,7 +204,7 @@ Not part of the DoD:
    missing `<cstdint>`. Same build-flag retry as the R2-Gaussian rasterizer
    should fix it (not yet in the 4DRGS cell). Needed by Step 4.1 (baseline 1,
    Oct 27), not by Step 1.1.
-2. **CADICA download:** skipped so far.
+2. **CADICA download:** done (owner, Oct 3).
 3. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
    which split each is: UNVERIFIED. TIGRE version string not recorded.
 
