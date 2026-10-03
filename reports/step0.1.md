@@ -1,8 +1,9 @@
 # Step 0.1: GPU environment and code base
 
-Dates: Sep 30 to Oct 4, 2026. Status: **in progress** (notebook written on
-Oct 1; molab run not done yet). Result fields are `TODO` until the molab
-output (`results/step0.1.json`) is pasted back.
+Dates: Sep 30 to Oct 4, 2026. Status: **build and reproduction done; DoD
+not met** (open items below). Results from the molab run of Oct 3, 2026,
+05:23 UTC, repo at `11a482a`, exit code 0. Raw record:
+`results/step0.1.json`.
 
 ## Scope of this pass
 
@@ -10,9 +11,9 @@ Decided by the project owner on Oct 1:
 
 | Plan bullet | This pass |
 |---|---|
-| Run R2-Gaussian on a CUDA GPU, reproduce one static reconstruction | Notebook written, run pending |
-| Check whether 4DRGS code is public; if yes, run it on one case | Public: yes. Run is in the notebook, pending |
-| Confirm TIGRE on the same GPU environment | In the notebook, pending |
+| Run R2-Gaussian on a CUDA GPU, reproduce one static reconstruction | Done: `0_chest_cone`, PSNR 3D within 0.06 dB of published |
+| Check whether 4DRGS code is public; if yes, run it on one case | Public: yes. Run: not done (submodule build failed, see 4DRGS section) |
+| Confirm TIGRE on the same GPU environment | Done: forward projection check passes |
 | OpenReview profile | Skipped for now |
 | Data-request emails to 4DRGS and PUNCH authors | Skipped for now |
 | CADICA download | Skipped for now |
@@ -22,7 +23,7 @@ Decided by the project owner on Oct 1:
 | Piece | Runs on |
 |---|---|
 | `notebooks/step0_setup.py` | molab GPU |
-| `src/flowsplat/setup_check.py`, `tests/test_setup_check.py` | M4 (CPU), 9 tests pass |
+| `src/flowsplat/setup_check.py`, `tests/test_setup_check.py` | M4 (CPU), 17 tests pass |
 
 The notebook uses the repo it already sits in (molab bootstrap case) and
 skips the clone. Only when it is not inside the repo does it clone, with the
@@ -38,7 +39,7 @@ token from `GH_TOKEN` if set, else from the password field. Run as a script
 | 4DRGS | https://github.com/ShanghaiTech-IMPACT/4DRGS | `38006edbb105b363ae2ed6b075e1766ec70a91dc` | committed 2026-08-24 |
 | tiny-cuda-nn (4DRGS dependency) | https://github.com/NVlabs/tiny-cuda-nn | `3daa6e5b8b8e0fa17971a1a20acfbb3754494b38` | default branch head on Oct 1, 2026 |
 
-Commit hashes confirmed by the notebook at run time: TODO.
+Commit hashes confirmed by the notebook at run time: yes, all four (HEAD equals the pin; `pins` in the JSON).
 
 ## Code availability (checked Oct 1, 2026)
 
@@ -61,12 +62,16 @@ REFERENCES.md said MICCAI 2025; corrected.
 | Compute capability | 12.0 (sm_120, in torch's arch list) |
 | torch | 2.11.0+cu130 |
 | CUDA (torch build) | 13.0, cuDNN 9.19 |
-| nvcc | Not in the molab image. Installed from pip (`cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]`, same version as torch's). Version: 13.0 (second molab run, Oct 2) |
+| nvcc | 13.0 (V13.0.88), from pip `cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]==13.0.*` into the venv. The image only has nvcc 13.3 (system site-packages), rejected because torch is cu130 |
+| CUDA_HOME | `~/flowsplat_work/cuda-13.0`: symlink tree of the venv `nvidia/cu13` (nvcc, crt, nvvm, cccl) and the system `nvidia/cu13` (cudart) |
+| CCCL include | `<CUDA_HOME>/include/cccl` (via `CPATH` and `NVCC_APPEND_FLAGS`) |
+| ninja | 1.13.2 |
+| Python env | uv venv `/tmp/uv-venv` on top of the image's system site-packages (`/usr/local/lib/python3.13`); torch is loaded from the system copy |
 | Python | 3.13.11 |
 | Driver | 595.71.05 |
 | GCC | 14.2.0 (Debian) |
 
-Values from the first molab run on Oct 2, 2026 (repo at `d517294`).
+Values from the molab run of Oct 3, 2026 (repo at `11a482a`). CUDA option used: **A** (image torch cu130 + CUDA 13.0 toolkit). Option B was not used.
 
 ## Debug log
 
@@ -77,7 +82,8 @@ Values from the first molab run on Oct 2, 2026 (repo at `d517294`).
 | Oct 2 | simple-knn: `cub/cub.cuh: No such file or directory`. Also: nvcc 13.3 used (pip prefix in /usr/local site-packages) while torch is cu130 (earlier run: nvcc 13.0 from /tmp/uv-venv); ninja missing | (1) ONE `CUDA_HOME` for every build, nvcc release must equal torch's CUDA (any other nvcc is rejected, pip toolkit pinned to `==<torch CUDA>.*`). (2) ninja installed. (3) Option A: CCCL dir (`include/cccl` in CUDA 13) found and added via `CPATH` and `NVCC_APPEND_FLAGS=-I...`. (4) Option B, automatic if any A build fails: torch + torchvision cu128 and CUDA 12.8 pip toolkit (nvcc, runtime, cccl), state in `WORK/cuda_option.json`, script restarts itself | Option A: No. First compiler error: `<command-line>: fatal error: cuda_runtime.h: No such file or directory` (run of Oct 3, repo `eab0468`). Option B: see next rows |
 | Oct 2 | Option B: `Option B expected torch with CUDA 12.8, got 13.0`. torch 2.11.0+cu130 is in the system site-packages (`/usr/local/lib/python3.13`), outside the uv venv (`/tmp/uv-venv`); pip could not uninstall it and reported cu128 torch as already satisfied | torch + torchvision cu128 installed INTO the venv with `--ignore-installed` (deps too), venv site-packages put first on `sys.path` and `PYTHONPATH`, then the process restarts. Checks: `torch.version.cuda == 12.8`, `sm_120` in the arch list; `sys.path` and `torch.__file__` printed and saved. CUDA 12.8 toolkit merged from venv wheels only | Shadowing: Yes (torch 2.11.0+cu128 loaded from `/tmp/uv-venv/...`, sm_120 in arch list). Build: No, see next row |
 | Oct 3 | (a) Option A root cause: nvcc 13.0 was installed into the venv's `nvidia/cu13`, but `nvidia-cuda-runtime` 13.0.96 was already satisfied in the system `nvidia/cu13`, so `cuda_runtime.h` was not under `CUDA_HOME`. A tooling problem, not a CUDA 13 API error. (b) Option B: `nvcc not found`. File list of `nvidia-cuda-nvcc-cu12` 12.8.93 checked: only `ptxas`, crt headers, libnvvm; no nvcc binary on PyPI for CUDA 12.8 | (a) `CUDA_HOME` is now one symlink tree `WORK/cuda-13.0`: venv `nvidia/cu13` first (nvcc 13.0, crt, nvvm, cccl), then system `nvidia/cu13` (cudart headers and libs). (b) Option B now stops with this reason and the plan fallback | Yes (Oct 3 rerun: Option A builds pass) |
-| Oct 3 | Builds pass under Option A, but R2-Gaussian `train.py` fails: `ModuleNotFoundError: No module named 'simple_knn'` after `pip install -e` (README Sec 1). Likely cause: simple-knn's setup.py builds `simple_knn._C` without listing a package, so the setuptools editable finder does not map it (UNVERIFIED) | After each build, `import torch, <module>` is checked in a fresh interpreter. If it fails: reinstall with `-e --config-settings editable_mode=compat`, then a regular install; the mode used is logged as a deviation. Import failures no longer trigger the Option A to B switch | TODO (rerun pending). Time box ends Oct 4 |
+| Oct 3 | Builds pass under Option A, but R2-Gaussian `train.py` fails: `ModuleNotFoundError: No module named 'simple_knn'` after `pip install -e` (README Sec 1). Likely cause: simple-knn's setup.py builds `simple_knn._C` without listing a package, so the setuptools editable finder does not map it (UNVERIFIED) | After each build, `import torch, <module>` is checked in a fresh interpreter. If it fails: reinstall with `-e --config-settings editable_mode=compat`, then a regular install; the mode used is logged as a deviation. Import failures no longer trigger the Option A to B switch | Yes (Oct 3: simple-knn installed as `editable_compat`, R2-Gaussian trained) |
+| Oct 3 | 4DRGS: `diff-Xray-gaussian-rasterization-voxelization-sortfree` fails: `rasterizer_impl.h(24): error: namespace "std" has no member "uintptr_t"` (same missing `<cstdint>` as the R2-Gaussian rasterizer) | Not fixed. The 4DRGS cell has no `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"` retry; the R2-Gaussian cell does and it worked there | No (open) |
 
 ## R2-Gaussian reproduction (its own example case)
 
@@ -86,13 +92,13 @@ Sec 3.2 command).
 
 | Metric | Ours | Expected | Source of expected |
 |---|---|---|---|
-| PSNR 3D (dB) | TODO | 35.09 | R2-Gaussian repo, `assets/results.md`, table "Synthetic dataset", row Chest, column "R2-Gaussian (50-view)" |
-| SSIM 3D | TODO | no per-case value published | For orientation only: 15-case average 0.952 (paper Table 1, synthetic, 50-view, "Ours (iter=30k)") |
-| PSNR 2D (dB) | TODO | not published | |
-| SSIM 2D | TODO | not published | |
-| Training time (min) | TODO | 5 to 15 on an RTX 3090 | README Sec 3.2 |
+| PSNR 3D (dB) | **35.146** | 35.09 | R2-Gaussian repo, `assets/results.md`, table "Synthetic dataset", row Chest, column "R2-Gaussian (50-view)" |
+| SSIM 3D | 0.935 | no per-case value published | For orientation only: 15-case average 0.952 (paper Table 1, synthetic, 50-view, "Ours (iter=30k)") |
+| PSNR 2D (dB) | 45.261 (eval yml); stdout at iter 30000 says 49.553. Which split each number is: UNVERIFIED | not published | |
+| SSIM 2D | 0.983 (eval yml); stdout says 0.985 | not published | |
+| Training time (min) | 13.0 | 5 to 15 on an RTX 3090 | README Sec 3.2 |
 
-Pass rule: abs(ours minus expected) <= 1 dB on PSNR 3D. Pass: TODO.
+Pass rule: abs(ours minus expected) <= 1 dB on PSNR 3D. Difference: +0.056 dB. **Pass: yes.**
 
 ## TIGRE check
 
@@ -101,10 +107,11 @@ value must equal the cube side length `sVoxel` within 2%.
 
 | Item | Value |
 |---|---|
-| TIGRE version | TODO |
-| Projection shape | TODO |
-| Central value vs expected | TODO |
-| Pass | TODO |
+| TIGRE version | not reported (`tigre.__version__` is missing); commit `6b0951a` |
+| Projection shape | [4, 64, 64] |
+| Central value vs expected | 256.002 vs 256.0 (relative error 1e-5) |
+| Forward time | 127.3 ms |
+| Pass | **yes** |
 
 ## 4DRGS on one case
 
@@ -113,30 +120,29 @@ until 5k), 2D rendering metrics on held-out views.
 
 | Metric | Ours | Expected | Source of expected |
 |---|---|---|---|
-| Eval PSNR (dB) | TODO | 36.349 | 4DRGS README, table under "Sort-free X-ray rasterization", case2, 30 views, "10k / 5k", Sort-free (authors' RTX 4060 Ti) |
-| Eval SSIM | TODO | 0.9021 | same row |
-| Ran without error | TODO | | |
+| Eval PSNR (dB) | not run | 36.349 | 4DRGS README, table under "Sort-free X-ray rasterization", case2, 30 views, "10k / 5k", Sort-free (authors' RTX 4060 Ti) |
+| Eval SSIM | not run | 0.9021 | same row |
+| Ran without error | No. tiny-cuda-nn built; `diff-Xray-gaussian-rasterization-voxelization-sortfree` failed to compile (`std::uintptr_t`, `uint32_t` undefined, missing `<cstdint>`) | | |
 
 ## Changes to the original code
 
-Source edits to R2-Gaussian, TIGRE, 4DRGS: **none planned**. The notebook
-checks `git diff` of every repo after the run and stores the result
-(`source_untouched`): TODO.
+Source edits to R2-Gaussian, TIGRE, 4DRGS: **none**. `git diff` after the
+run (`source_untouched`): r2_gaussian true, tigre true, 4drgs true.
 
-Deviations from the READMEs that are not source edits (planned; the final
-list comes from `deviations` in the JSON):
+Deviations from the READMEs that are not source edits (final list in
+`deviations` of the JSON):
 
 | Deviation | Instead of | Reason |
 |---|---|---|
-| Python, torch and CUDA versions of the molab image (TODO exact) | R2-Gaussian README: Python 3.9, torch 2.1.2+cu118; pinned `requirements.txt` | The Blackwell GPU is not supported by those old builds. Same packages, unpinned |
+| Python 3.13.11, torch 2.11.0+cu130 (CUDA 13.0) of the molab image | R2-Gaussian README: Python 3.9, torch 2.1.2+cu118; pinned `requirements.txt` | The Blackwell GPU is not supported by those old builds. Same packages, unpinned |
 | TIGRE at commit `6b0951a` (v3.1.3 line) | R2-Gaussian README: TIGRE v2.3 zip | Rule: pin the official repo to a commit; v3.1.x reads the GPU architectures from nvcc at build time |
-| CUDA compiler from pip (`cuda-toolkit` extras), `CUDA_HOME` inside site-packages, linker symlinks added there | A system CUDA toolkit | molab has no `nvcc`. Same CUDA version as torch. No repo file touched |
+| CUDA compiler from pip (`cuda-toolkit` extras, 13.0), `CUDA_HOME` = symlink tree of venv and system `nvidia/cu13` | A system CUDA toolkit | molab has no matching `nvcc`; the cudart headers stay in the system prefix. Same CUDA version as torch. No repo file touched |
 | `pip install --no-build-isolation` for every CUDA extension (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, 4DRGS submodules) | Plain `pip install` / `pip install -e` | Isolated build env has no torch, so setup.py fails to import it. Build flag only; no source change |
 | One `CUDA_HOME` with nvcc pinned to torch's CUDA version; ninja installed | Whatever nvcc is on PATH | A 13.3 nvcc was picked up against torch cu130. Tooling only |
-| Option A: CCCL include dir (`<CUDA_HOME>/include/cccl`) via `CPATH` and `NVCC_APPEND_FLAGS=-I...` | Plain build | CUDA 13 moved cub/thrust to `include/cccl`. Build flag only. Used: TODO |
-| Option B (only if an A build fails): torch + torchvision cu128 installed into the venv with `--ignore-installed` (shadows the system torch), CUDA 12.8 pip toolkit, merged into one `CUDA_HOME` by symlinks | Image torch 2.11.0+cu130 in the system site-packages | Other CUDA 13 incompatibilities in the extensions. sm_120 is supported in 12.8. Used: TODO |
-| Install mode `editable_compat` or regular, only if `import` fails after `pip install -e` | `pip install -e` (R2-Gaussian README Sec 1) | Extension compiled but was not importable. Install mode only. Used: TODO |
-| `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"`, only if the plain build fails | Plain `pip install -e` | Build flag only, for newer GCC. Used: TODO |
+| Option A: CCCL include dir (`<CUDA_HOME>/include/cccl`) via `CPATH` and `NVCC_APPEND_FLAGS=-I...` | Plain build | CUDA 13 moved cub/thrust to `include/cccl`. Build flag only. Used: **yes** |
+| Option B (only if an A build fails): torch + torchvision cu128 installed into the venv with `--ignore-installed` (shadows the system torch), CUDA 12.8 pip toolkit, merged into one `CUDA_HOME` by symlinks | Image torch 2.11.0+cu130 in the system site-packages | Planned fallback for CUDA 13 incompatibilities. Used: **no**. Not usable with pip anyway: PyPI has no CUDA 12.8 nvcc binary |
+| Install mode `editable_compat` or regular, only if `import` fails after `pip install -e` | `pip install -e` (R2-Gaussian README Sec 1) | Extension compiled but was not importable. Install mode only. Used: **yes**, simple-knn as `editable_compat` |
+| `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"`, only if the plain build fails | Plain `pip install -e` | Build flag only, for newer GCC. Used: **yes**, xray-gaussian-rasterization-voxelization (`std::uintptr_t` / `uint32_t` undefined without it) |
 | 4DRGS: `--fdk_toolbox=tigre`; test with `--render_2d` only | Default `leap`; README test also has `--render_fixview --VQR` | TIGRE is already built; CLI flags only. Whether the README numbers used LEAP or TIGRE is UNVERIFIED |
 
 ## DoD
@@ -146,26 +152,38 @@ renders correctly; OpenReview profile active; data-request emails sent."
 
 | DoD part | Met |
 |---|---|
-| R2-Gaussian builds and reproduces its example case on molab | TODO |
+| R2-Gaussian builds and reproduces its example case on molab | **Yes** (PSNR 3D 35.146 vs 35.09 dB, +0.056 dB; TIGRE check passes) |
 | Static reconstruction of one ImageCAS vessel renders correctly | No (not part of this pass) |
 | OpenReview profile active | No (skipped for now) |
 | Data-request emails sent | No (skipped for now) |
 
-**DoD met: no (in progress).**
+**DoD met: no.** The CUDA part (the risk this step exists for) is done; the
+ImageCAS vessel, OpenReview and emails are not.
 
-**Fallback used: no.** Plan fallback, to apply only if the build fails: "If
-the CUDA rasterizer will not build: another cloud GPU. If nothing works by
-Oct 4: plain PyTorch Gaussian splatter (slower, no custom CUDA). Do not
-change the project."
+**Fallback used: no.** The rasterizer builds and runs on molab, so the
+fallback below is not triggered (Oct 4 setup gate condition "CUDA rasterizer
+does not run" is false). Plan fallback, for reference: "If the CUDA
+rasterizer will not build: another cloud GPU. If nothing works by Oct 4:
+plain PyTorch Gaussian splatter (slower, no custom CUDA). Do not change the
+project."
 
-## Not verified yet
+## Still open
 
-- The notebook has not been executed. On the M4 it was only parsed and its
-  cell inputs and outputs were checked.
-- Whether R2-Gaussian and 4DRGS run unchanged with a current numpy / torch.
-- Whether the pip CUDA compiler builds the extensions (layout checked from
-  the wheel file lists only).
-- Whether every Python dependency has a wheel for Python 3.13 (open3d is the
-  one to watch). Failures are listed in `build.pip_failed`.
-- Size of the R2-Gaussian dataset zip (all 15 cases are in one file; only
-  `0_chest_cone` is extracted).
+1. **ImageCAS vessel (DoD).** Static R2-Gaussian reconstruction of one
+   ImageCAS vessel, rendered and checked. Needs ImageCAS access and TIGRE
+   projections of one vessel volume.
+2. **4DRGS on case2 (plan bullet).** Its rasterizer submodule fails on the
+   missing `<cstdint>`. Same build-flag retry as the R2-Gaussian rasterizer
+   should fix it (not yet in the 4DRGS cell).
+3. **OpenReview profile** and **data-request emails** (4DRGS, PUNCH authors):
+   owner tasks, skipped so far.
+4. **CADICA download:** skipped so far.
+5. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
+   which split each is: UNVERIFIED. TIGRE version string not recorded.
+
+## Not verified
+
+- Which 2D split the stored PSNR 2D / SSIM 2D come from (see above).
+- simple-knn setup.py contents (reason the plain `-e` install was not
+  importable): UNVERIFIED, gitlab.inria.fr blocked automated reading.
+- Whether 4DRGS reproduces its README numbers on this GPU (not run).
