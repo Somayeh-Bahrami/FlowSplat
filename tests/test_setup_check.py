@@ -154,11 +154,15 @@ def test_find_include_dir_through_symlinked_cccl(tmp_path):
     assert sc.find_include_dir([home]) == home / "include"
 
 
-def test_notebook_cell_wiring():
+import pytest
+
+
+@pytest.mark.parametrize("nb", sorted(p.name for p in (ROOT / "notebooks").glob("*.py")))
+def test_notebook_cell_wiring(nb):
     """Every marimo cell input is returned by exactly one cell, and every
     cross-cell name a cell reads is one of its inputs (marimo is not installed
     on the M4, so this stands in for its dependency check)."""
-    tree = ast.parse((ROOT / "notebooks" / "step0_setup.py").read_text())
+    tree = ast.parse((ROOT / "notebooks" / nb).read_text())
     cells = [
         n for n in tree.body
         if isinstance(n, ast.FunctionDef) and any("app.cell" in ast.unparse(d) for d in n.decorator_list)

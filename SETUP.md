@@ -94,6 +94,18 @@ compile fails, and then stops with the reason above and the plan fallback.
 The choice is kept in `~/flowsplat_work/cuda_option.json`; delete it (or set
 `FLOWSPLAT_CUDA_OPTION=A`) to go back to Option A.
 
+### Run the ImageCAS vessel reconstruction (Step 0.1 DoD)
+
+1. Upload one ImageCAS label file (`<id>.label.nii.gz`, a few MB) to molab,
+   e.g. to `~/flowsplat_work/imagecas/`.
+2. Launcher cell: `python notebooks/step0_imagecas_recon.py` from the repo
+   root, with `IMAGECAS_LABEL=<path>` in the environment (or leave it unset
+   to use the first label under `~/flowsplat_work/imagecas/`).
+3. In a fresh session it first rebuilds the extensions with
+   `FLOWSPLAT_BUILD_ONLY=1 python notebooks/step0_setup.py` (about 4 min),
+   then generates projections, trains (about 13 min) and writes
+   `results/step0.1_imagecas.json` and `results/step0.1_imagecas.png`.
+
 ### Known open issue
 
 4DRGS: `diff-Xray-gaussian-rasterization-voxelization-sortfree` fails with

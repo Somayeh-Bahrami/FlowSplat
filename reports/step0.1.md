@@ -23,7 +23,8 @@ Decided by the project owner on Oct 1:
 | Piece | Runs on |
 |---|---|
 | `notebooks/step0_setup.py` | molab GPU |
-| `src/flowsplat/setup_check.py`, `tests/test_setup_check.py` | M4 (CPU), 17 tests pass |
+| `notebooks/step0_imagecas_recon.py` | molab GPU |
+| `src/flowsplat/setup_check.py`, `src/flowsplat/imagecas_volume.py`, `tests/` | M4 (CPU), 25 tests pass |
 
 The notebook uses the repo it already sits in (molab bootstrap case) and
 skips the clone. Only when it is not inside the repo does it clone, with the
@@ -124,6 +125,32 @@ until 5k), 2D rendering metrics on held-out views.
 | Eval SSIM | not run | 0.9021 | same row |
 | Ran without error | No. tiny-cuda-nn built; `diff-Xray-gaussian-rasterization-voxelization-sortfree` failed to compile (`std::uintptr_t`, `uint32_t` undefined, missing `<cstdint>`) | | |
 
+## ImageCAS vessel (DoD item)
+
+Notebook `notebooks/step0_imagecas_recon.py` (molab), helper
+`src/flowsplat/imagecas_volume.py` (M4 tests: `tests/test_imagecas_volume.py`).
+
+Pipeline: one ImageCAS label, largest connected component (one vessel tree),
+cropped with 5 mm margin, turned into a 256^3 volume in [0, 1] with the
+steps of R2-Gaussian `process_raw_data.py`. Projections, initialisation and
+training with R2-Gaussian's own `generate_data.py` (`cone_beam.yml`, 50
+train / 100 test views), `initialize_pcd.py` and `train.py`, all unchanged
+(only `--n_points` lowered if the vessel has too few voxels).
+
+Pass rule (Ref: OURS, no published value exists): training finishes,
+prediction finite, Dice(pred > 0.5, GT > 0.5) >= 0.7. PSNR / SSIM from
+R2-Gaussian are reported too.
+
+| Item | Value |
+|---|---|
+| ImageCAS case | TODO |
+| Cube side / voxel size | TODO |
+| PSNR 3D / SSIM 3D | TODO |
+| Dice | TODO |
+| Training time | TODO |
+| Figure | `results/step0.1_imagecas.png` (TODO) |
+| Pass | TODO |
+
 ## Changes to the original code
 
 Source edits to R2-Gaussian, TIGRE, 4DRGS: **none**. `git diff` after the
@@ -153,12 +180,12 @@ renders correctly; OpenReview profile active; data-request emails sent."
 | DoD part | Met |
 |---|---|
 | R2-Gaussian builds and reproduces its example case on molab | **Yes** (PSNR 3D 35.146 vs 35.09 dB, +0.056 dB; TIGRE check passes) |
-| Static reconstruction of one ImageCAS vessel renders correctly | No (not part of this pass) |
-| OpenReview profile active | No (skipped for now) |
-| Data-request emails sent | No (skipped for now) |
+| Static reconstruction of one ImageCAS vessel renders correctly | TODO (notebook written, molab run pending) |
+| OpenReview profile active | **Yes** (owner, Oct 3) |
+| Data-request emails sent | **Yes** (owner, Oct 3) |
 
-**DoD met: no.** The CUDA part (the risk this step exists for) is done; the
-ImageCAS vessel, OpenReview and emails are not.
+**DoD met: no (one item left).** CUDA build, OpenReview and emails are
+done; the ImageCAS vessel run is pending.
 
 **Fallback used: no.** The rasterizer builds and runs on molab, so the
 fallback below is not triggered (Oct 4 setup gate condition "CUDA rasterizer
@@ -169,16 +196,13 @@ project."
 
 ## Still open
 
-1. **ImageCAS vessel (DoD).** Static R2-Gaussian reconstruction of one
-   ImageCAS vessel, rendered and checked. Needs ImageCAS access and TIGRE
-   projections of one vessel volume.
+1. **ImageCAS vessel (DoD).** Notebook written; needs one ImageCAS label
+   file on molab and a run.
 2. **4DRGS on case2 (plan bullet).** Its rasterizer submodule fails on the
    missing `<cstdint>`. Same build-flag retry as the R2-Gaussian rasterizer
    should fix it (not yet in the 4DRGS cell).
-3. **OpenReview profile** and **data-request emails** (4DRGS, PUNCH authors):
-   owner tasks, skipped so far.
-4. **CADICA download:** skipped so far.
-5. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
+3. **CADICA download:** skipped so far.
+4. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
    which split each is: UNVERIFIED. TIGRE version string not recorded.
 
 ## Not verified

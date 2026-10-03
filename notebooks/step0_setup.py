@@ -28,7 +28,8 @@
 #   - opened in marimo: press the "Run Step 0.1 setup" button
 #   - from a bootstrap notebook or a terminal, inside the cloned repo:
 #       python notebooks/step0_setup.py
-#     (script mode starts without the button; FLOWSPLAT_RUN_4DRGS=0 skips 4DRGS)
+#     (script mode starts without the button; FLOWSPLAT_RUN_4DRGS=0 skips 4DRGS;
+#     FLOWSPLAT_BUILD_ONLY=1 stops after the builds)
 
 import marimo
 
@@ -753,6 +754,8 @@ def _(
     R2G_EXPECTED,
     WORK,
     build_info,
+    mo,
+    os,
     setup_check,
     sh,
     sys,
@@ -761,6 +764,10 @@ def _(
 ):
     # f) R2-Gaussian on its own example case (README Sec 3.2: `python train.py -s XXX/0_chest_cone`).
     _ = build_info
+    # FLOWSPLAT_BUILD_ONLY=1: stop after the builds (used by
+    # notebooks/step0_imagecas_recon.py in a fresh molab session). Nothing
+    # below runs, so results/step0.1.json is not overwritten.
+    mo.stop(os.environ.get("FLOWSPLAT_BUILD_ONLY") == "1", mo.md("Build only: stopped after the builds."))
     _data = WORK / "data_r2g"
     _data.mkdir(parents=True, exist_ok=True)
     _zip = _data / "cone_ntrain_50_angle_360.zip"
