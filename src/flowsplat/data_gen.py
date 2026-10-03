@@ -62,6 +62,8 @@ SMOOTH_RAD_MM = 2.0
 # OURS: QC gate for an LAD geometry.
 LAD_LEN_MM = (60.0, 250.0)
 LAD_RADIUS_MM = (0.3, 3.0)
+PROX_MM, PROX_FRAC = 10.0, 0.8
+MIN_ANTERIOR_MM = 10.0
 # OURS: LAD candidates are leaves at least this fraction of the longest
 # root-to-leaf geodesic.
 LAD_MIN_LEN_FRAC = 0.7
@@ -72,21 +74,26 @@ VIEW_SETS = (30, 60, 133)
 
 
 # =============================== geometry ===============================
-def _anterior_score_fn(axcodes):
-    """Function coords -> larger is more anterior, from NIfTI axis codes. Ref: OURS."""
-    ax = next((i for i, c in enumerate(axcodes) if c in ("A", "P")), None)
+def _axis_score_fn(axcodes, toward):
+    """Function coords -> larger is further toward `toward` ('A', 'R', ...),
+    from NIfTI axis codes. Ref: OURS."""
+    pair = {"A": "P", "P": "A", "R": "L", "L": "R", "S": "I", "I": "S"}[toward]
+    ax = next((i for i, c in enumerate(axcodes) if c in (toward, pair)), None)
     if ax is None:
         return None
-    sign = 1.0 if axcodes[ax] == "A" else -1.0
+    sign = 1.0 if axcodes[ax] == toward else -1.0
     return lambda c: sign * np.asarray(c, dtype=float)[..., ax]
 
 
 def lad_path_indices(coords, radii, iso_mm, axcodes, min_len_frac=LAD_MIN_LEN_FRAC):
     """Pick the LAD as one root-to-leaf path of the LCA skeleton.
 
-    Root: largest-radius endpoint (same convention as the reused
-    _traversal_order: radius decreases distally, so the ostium is the widest
-    tip). Leaves: endpoints whose geodesic distance from the root is at
+    Root (ostium): the endpoint furthest toward the patient's RIGHT. The left
+    main leaves the aorta toward the patient's left, so the ostium is the LCA
+    tip nearest the aorta. (The widest-endpoint convention of the reused
+    _traversal_order picked a distal stump in 5 of the first 20 ImageCAS
+    cases on the QC sheet, Oct 3, so it is not used here.) Leaves: endpoints
+    whose geodesic distance from the root is at
     least `min_len_frac` of the longest. LAD: the candidate whose leaf is the
     most anterior (the LAD runs in the anterior interventricular groove,
     the LCx posteriorly in the AV groove).
@@ -112,12 +119,15 @@ def lad_path_indices(coords, radii, iso_mm, axcodes, min_len_frac=LAD_MIN_LEN_FR
     endpoints = np.where(degree <= 1)[0]
     if len(endpoints) < 2:
         raise ValueError("skeleton has fewer than 2 endpoints")
-    root = int(endpoints[np.argmax(radii[endpoints])])
+    right = _axis_score_fn(axcodes, "R")
+    if right is None:
+        raise ValueError(f"no L/R axis in NIfTI axis codes {axcodes}")
+    root = int(endpoints[np.argmax(right(coords[endpoints]))])
     dist, pred = dijkstra(graph, indices=root, return_predecessors=True)
     leaves = [int(e) for e in endpoints if e != root and np.isfinite(dist[e])]
     dmax = max(dist[e] for e in leaves)
     cands = [e for e in leaves if dist[e] >= min_len_frac * dmax]
-    score = _anterior_score_fn(axcodes)
+    score = _axis_score_fn(axcodes, "A")
     if score is None:
         raise ValueError(f"no A/P axis in NIfTI axis codes {axcodes}")
     leaf = max(cands, key=lambda e: score(coords[e]))
@@ -165,7 +175,7 @@ def resample_and_smooth(points_mm, radii_mm, ds=DS_MM, sigma_pos_mm=SMOOTH_POS_M
 
 
 def extract_lad(label, affine, spacing, iso_mm=None, margin_mm=2.0):
-    """ImageCAS label -> LAD (s, xyz_mm, r_mm) + info, or raise ValueError.
+    """ImageCAS label -> LAD (s, xyz_mm, r_mm), info, skeleton_mm; or raise ValueError.
 
     xyz is in mm in the cropped isotropic array frame (array axes, not world
     axes); only lengths and radii are used downstream.
@@ -199,11 +209,21 @@ def extract_lad(label, affine, spacing, iso_mm=None, margin_mm=2.0):
     path, info = lad_path_indices(coords, radii, iso, axcodes)
     s, xyz, r = resample_and_smooth(coords[path] * iso, radii[path])
     info.update({"iso_mm": iso, "lca_voxels": int(lca["n_vox"]), "axcodes": "".join(axcodes)})
-    return s, xyz, r, info
+    return s, xyz, r, info, coords * iso  # whole LCA skeleton, for the QC figure
 
 
-def qc_lad(s, r):
-    """QC gate for one LAD. Returns None if ok, else the reason. Ref: OURS."""
+def qc_lad(s, r, xyz=None, axcodes=None):
+    """QC gate for one LAD. Returns None if ok, else the reason.
+
+    Besides length and radius ranges: (a) the first PROX_MM must be wide
+    (median >= PROX_FRAC x 95th percentile of r), else the root is a distal
+    tip, not the ostium; (b) the distal end must lie at least
+    MIN_ANTERIOR_MM anterior of the ostium, else the LCx was picked. Both
+    added after the QC-sheet review of Oct 3 (cases 574, 577, 578 failed by
+    eye).
+
+    Ref: OURS.
+    """
     length = float(s[-1])
     if not (LAD_LEN_MM[0] <= length <= LAD_LEN_MM[1]):
         return f"length {length:.1f} mm outside {LAD_LEN_MM}"
@@ -211,6 +231,15 @@ def qc_lad(s, r):
         return "non-finite radius"
     if r.min() < LAD_RADIUS_MM[0] or r.max() > LAD_RADIUS_MM[1]:
         return f"radius {r.min():.2f} to {r.max():.2f} mm outside {LAD_RADIUS_MM}"
+    prox = float(np.median(r[s <= PROX_MM]))
+    if prox < PROX_FRAC * float(np.percentile(r, 95)):
+        return f"proximal radius {prox:.2f} mm < {PROX_FRAC} x p95 ({np.percentile(r, 95):.2f}): root not at ostium?"
+    if xyz is not None and axcodes is not None:
+        ant = _axis_score_fn(axcodes, "A")
+        if ant is not None:
+            gain = float(ant(xyz[-1]) - ant(xyz[0]))
+            if gain < MIN_ANTERIOR_MM:
+                return f"distal end only {gain:.1f} mm anterior of the ostium: LCx picked?"
     return None
 
 
@@ -319,19 +348,25 @@ def timing_check(transit_s, length_mm, view_sets=VIEW_SETS, sweep_s=SWEEP_S):
 
 
 # =============================== driver ===============================
-def _qc_figure(path_png, s, xyz, r, case_id):
-    """MIPs of the LAD path coloured by radius (spot check of the LAD choice). Ref: OURS."""
+def _qc_figure(path_png, s, xyz, r, case_id, skel_mm=None, axcodes="???"):
+    """Whole LCA skeleton (gray) with the chosen LAD (coloured by radius), in
+    three projections with anatomical axis labels; radius profile. Used for
+    the visual spot check of the LAD choice. Ref: OURS."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(1, 4, figsize=(16, 4))
+    fig, ax = plt.subplots(1, 4, figsize=(18, 4.5))
     for k, (a, b) in enumerate([(0, 1), (0, 2), (1, 2)]):
+        if skel_mm is not None:
+            ax[k].scatter(skel_mm[:, a], skel_mm[:, b], c="0.8", s=1)
         sc = ax[k].scatter(xyz[:, a], xyz[:, b], c=r, s=4, cmap="viridis")
         ax[k].plot(xyz[0, a], xyz[0, b], "r*", ms=12)
         ax[k].set_aspect("equal")
-        ax[k].set_title(f"case {case_id}: axes {a}-{b} (star = ostium)")
+        ax[k].set_xlabel(f"axis {a}: + = {axcodes[a]}")
+        ax[k].set_ylabel(f"axis {b}: + = {axcodes[b]}")
+        ax[k].set_title(f"case {case_id} (star = ostium)")
     fig.colorbar(sc, ax=ax[2], label="r (mm)")
     ax[3].plot(s, r)
     ax[3].set_xlabel("s (mm)")
@@ -341,7 +376,13 @@ def _qc_figure(path_png, s, xyz, r, case_id):
     plt.close(fig)
 
 
-def generate(imagecas_dir, out_dir, n_geom=40, per_geom=5, seed=0, max_try=None):
+# Visual QC exclusions (QC sheet review, Oct 3, 2026). Ref: OURS.
+VISUAL_EXCLUDE = {
+    "637": "path dips posterior, then ends far left; shorter branches reach further anterior (LAD unclear)",
+}
+
+
+def generate(imagecas_dir, out_dir, n_geom=40, per_geom=5, seed=0, max_try=None, exclude=None):
     """Extract up to n_geom LADs and draw per_geom cases each. Writes:
     out_dir/geom/<id>.npz, out_dir/cases/<id>_<k>.npz, out_dir/qc/<id>.png,
     out_dir/cases.csv, out_dir/summary.json. Returns the summary dict.
@@ -360,10 +401,15 @@ def generate(imagecas_dir, out_dir, n_geom=40, per_geom=5, seed=0, max_try=None)
         if len(geoms) >= n_geom:
             break
         cid = f.name.split(".")[0]
+        exclude = VISUAL_EXCLUDE if exclude is None else exclude
+        if cid in exclude:
+            rejects.append({"case": cid, "reason": f"visual QC: {exclude[cid]}"})
+            print(f"[reject] {cid}: visual QC", flush=True)
+            continue
         try:
             nii = nib.load(str(f))
-            s, xyz, r, info = extract_lad(np.asanyarray(nii.dataobj), nii.affine, nii.header.get_zooms()[:3])
-            why = qc_lad(s, r)
+            s, xyz, r, info, skel = extract_lad(np.asanyarray(nii.dataobj), nii.affine, nii.header.get_zooms()[:3])
+            why = qc_lad(s, r, xyz, info["axcodes"])
             if why:
                 raise ValueError(why)
         except Exception as e:  # recorded, the next file is tried
@@ -371,7 +417,7 @@ def generate(imagecas_dir, out_dir, n_geom=40, per_geom=5, seed=0, max_try=None)
             print(f"[reject] {cid}: {e}", flush=True)
             continue
         np.savez(out_dir / "geom" / f"{cid}.npz", s=s, xyz_mm=xyz, r_ref_mm=r, info=json.dumps(info))
-        _qc_figure(out_dir / "qc" / f"{cid}.png", s, xyz, r, cid)
+        _qc_figure(out_dir / "qc" / f"{cid}.png", s, xyz, r, cid, skel, info["axcodes"])
         geoms.append({"case": cid, "length_mm": float(s[-1]), **info})
         for k in range(per_geom):
             rng = np.random.default_rng([seed, int(cid), k])

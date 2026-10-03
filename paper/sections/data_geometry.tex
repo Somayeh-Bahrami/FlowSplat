@@ -1,0 +1,31 @@
+% Step 1.1: synthetic benchmark, geometry and ground-truth flow / FFR.
+% Numbers from results/step1.1_summary.json.
+% Bib keys to add to the .bib: zeng2023imagecas, thakur2026punch, young1973flow.
+
+\paragraph{Vessel geometry.}
+No public dataset pairs dynamic angiography with ground-truth flow or FFR,
+so we build a synthetic benchmark on real coronary anatomy. From the
+expert coronary labels of ImageCAS~\cite{zeng2023imagecas} we separate the
+left coronary tree, skeletonize it on an isotropic grid at the native
+in-plane spacing, and take the radius from the Euclidean distance
+transform. Because ImageCAS does not label individual arteries, the LAD is
+selected as the most anterior long root-to-leaf path from the ostium, and
+every selection passes an automatic and a visual quality check. The
+centerline and radius are smoothed and resampled every 0.5\,mm. The
+resulting 40 LADs measure 81 to 165\,mm from the ostium.
+
+\paragraph{Stenoses, flow and FFR.}
+Each LAD receives five independent focal stenoses with a smooth cosine
+profile, a diameter reduction drawn uniformly from 30 to 70\,\% and a
+length from 5 to 15\,mm, placed in the proximal 60\,\% of the vessel,
+giving 200 cases. Following PUNCH~\cite{thakur2026punch}, the mean resting
+velocity in the normal segment is drawn from 10 to 20\,cm/s and the
+hyperemic flow is the resting flow scaled by a coronary flow reserve drawn
+from 1.5 to 4.0, capped at 0.4\,m/s. Ground-truth FFR is computed at
+hyperemic flow with the Young--Tsai pressure-drop model~\cite{young1973flow}
+($\mu = 3.5$\,mPa\,s, $\rho = 1060$\,kg/m$^3$, $K_t = 1.52$,
+$P_a = 90$\,mmHg). The benchmark spans FFR values from 0.30 to 0.99, with
+36\,\% of cases below the 0.80 treatment threshold. At rest, the contrast
+transit time through the LAD ranges from 0.28 to 2.0\,s, so even with 30
+views over the 4.4\,s rotational sweep the bolus front is observed in at
+least two consecutive views.

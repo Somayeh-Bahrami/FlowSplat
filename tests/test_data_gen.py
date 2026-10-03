@@ -26,25 +26,28 @@ def _poly(a, b, n=200):
 
 
 def synthetic_label():
-    """RAS-oriented volume (identity directions): split_components names the
-    component with the SMALLEST x index as LCA when the axis code is 'R'.
+    """RAS-oriented volume (identity directions, +x = patient right):
+    split_components names the component with the SMALLEST x as LCA.
 
-    LCA: trunk (widest, r = 2 mm, 11 mm) from the ostium, then an anterior
-    branch (+y, LAD, about 65 mm) and a posterior branch (-y, LCx, about
-    70 mm, longer). Plus a separate RCA at large x.
+    LCA: trunk (r = 2 mm, 11 mm) from the ostium (its most rightward point)
+    going left (-x), then an anterior branch (+y, LAD, about 65 mm) and a
+    posterior branch (-y, LCx, about 70 mm, longer), both further left.
+    The LCx tip is made wide (a stump) so the widest-endpoint rule would
+    fail. Plus a separate RCA at large x.
     """
     shape = (120, 300, 240)
     m = np.zeros(shape, np.uint8)
-    ost = np.array([30.0, 150.0, 220.0])
+    ost = np.array([50.0, 150.0, 220.0])
     bif = np.array([40.0, 150.0, 200.0])
-    lad_end = bif + np.array([5.0, 70.0, -110.0]) * 1.0  # anterior-inferior, 130 vox
-    lcx_end = bif + np.array([10.0, -80.0, -100.0]) * 1.08  # posterior, 139 vox
+    lad_end = bif + np.array([-5.0, 70.0, -110.0]) * 1.0  # anterior-inferior, 130 vox
+    lcx_end = bif + np.array([-10.0, -80.0, -100.0]) * 1.08  # posterior, 139 vox
     trunk = _poly(ost, bif, 60)
     _tube(m, trunk, np.full(len(trunk), 4.0))
     lad = _poly(bif, lad_end, 500)
     _tube(m, lad, np.linspace(3.2, 2.2, len(lad)))
     lcx = _poly(bif, lcx_end, 500)
     _tube(m, lcx, np.linspace(3.0, 2.0, len(lcx)))
+    _tube(m, lcx[-5:], np.full(5, 5.0))  # wide distal stump
     rca = _poly(np.array([100.0, 150.0, 200.0]), np.array([105.0, 170.0, 60.0]), 300)
     _tube(m, rca, np.full(len(rca), 3.0))
     affine = np.diag([SP, SP, SP, 1.0])
@@ -54,7 +57,7 @@ def synthetic_label():
 @pytest.fixture(scope="module")
 def lad():
     m, aff, lad_end, lcx_end = synthetic_label()
-    s, xyz, r, info = dg.extract_lad(m, aff, (SP, SP, SP))
+    s, xyz, r, info, _ = dg.extract_lad(m, aff, (SP, SP, SP))
     return s, xyz, r, info, lad_end, lcx_end
 
 
@@ -75,7 +78,8 @@ def test_extract_lad_length_and_radius(lad):
     assert 68 < s[-1] < 80
     assert r[0] > r[-1]  # radius decreases distally
     assert 1.7 < r[0] < 2.3 and 0.8 < r[-1] < 1.4
-    assert dg.qc_lad(s, r) is None
+    assert xyz[0][0] > xyz[-1][0]  # starts at the rightward ostium
+    assert dg.qc_lad(s, r, xyz, info["axcodes"]) is None
 
 
 def test_qc_lad_rejects():
@@ -83,6 +87,15 @@ def test_qc_lad_rejects():
     assert "length" in dg.qc_lad(s, np.ones_like(s))
     s = np.arange(0, 100, 0.5)
     assert "radius" in dg.qc_lad(s, np.full_like(s, 5.0))
+    # narrow start, wide later: root is a distal tip
+    r = np.concatenate([np.full(40, 0.8), np.full(160, 1.8)])
+    assert "proximal" in dg.qc_lad(s, r)
+    # tapering vessel that ends posterior of the ostium (RAS: +y = anterior)
+    r = np.linspace(1.8, 1.0, len(s))
+    xyz = np.stack([np.zeros_like(s), -0.3 * s, -s], axis=1)
+    assert "anterior" in dg.qc_lad(s, r, xyz, "RAS")
+    xyz[:, 1] *= -1
+    assert dg.qc_lad(s, r, xyz, "RAS") is None
 
 
 def test_insert_stenosis_profile():
