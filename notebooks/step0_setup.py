@@ -575,6 +575,7 @@ def _(
     pins,
     pip_install,
     setup_check,
+    subprocess,
     sys,
     time,
 ):
@@ -611,10 +612,61 @@ def _(
         }
     )
 
-    def _build(path, label):
-        """Build one CUDA extension. Plain first; one retry with a logged nvcc flag."""
+    def _importable(module):
+        """True when `module` imports in a fresh interpreter, run outside the repo dirs.
+
+        Ref: OURS (tooling). Catches a build that succeeds but is not on the
+        import path, as seen on molab Oct 3: "No module named 'simple_knn'"
+        in train.py after a successful `pip install -e`.
+        """
+        _r = subprocess.run(
+            [sys.executable, "-c", f"import torch, {module}"], cwd="/", capture_output=True, text=True
+        )
+        if _r.returncode != 0:
+            print(f"import {module} failed:", (_r.stderr.strip().splitlines() or ["?"])[-1])
+        return _r.returncode == 0
+
+    def _build(path, label, module):
+        """Build one CUDA extension, then check that `module` imports.
+
+        Install modes, in order, each kept only if the import works:
+        `pip install -e` (README), `-e` with setuptools editable_mode=compat,
+        regular (non-editable) install. Each is tried plain and, if the
+        compile fails, once more with a logged nvcc flag.
+
+        Ref: R2-Gaussian README Sec 1 (pip path: `pip install -e
+        r2_gaussian/submodules/simple-knn`). Fallback modes: OURS (tooling).
+        Why -e can fail: simple-knn's setup.py builds `simple_knn._C` without
+        listing a Python package, so the setuptools >= 64 editable finder may
+        not map `simple_knn` (setup.py contents UNVERIFIED: gitlab.inria.fr
+        blocked automated reading).
+        """
+        _modes = [
+            ("editable", ["-e", str(path)]),
+            ("editable_compat", ["-e", str(path), "--config-settings", "editable_mode=compat"]),
+            ("regular", [str(path)]),
+        ]
+        for _i, (_mode, _args) in enumerate(_modes):
+            _how = _compile(_args, label)
+            if _importable(module):
+                if _i > 0:
+                    deviations.append(
+                        {
+                            "what": f"{label}: installed as '{_mode}' ({' '.join(_args[1:]) or 'pip install <path>'})",
+                            "instead_of": "`pip install -e` from the R2-Gaussian README",
+                            "reason": f"The -e build compiled but `import {module}` failed (module not on the "
+                            "import path). Install mode only; source untouched.",
+                        }
+                    )
+                return f"{_mode}+{_how}"
+        # ImportError, not RuntimeError: this is not a compiler failure, so it
+        # must not trigger the Option A -> B switch below.
+        raise ImportError(f"{label}: built, but `import {module}` fails in every install mode (see messages above).")
+
+    def _compile(args, label):
+        """pip-install one extension; plain first, one retry with a logged nvcc flag. Ref: OURS (tooling)."""
         try:
-            pip_install(["--no-build-isolation", "-e", str(path)], env=_env)
+            pip_install(["--no-build-isolation", *args], env=_env)
             return "plain"
         except RuntimeError:
             # Build-flag-only retry. NVCC_APPEND_FLAGS is read by nvcc itself, so
@@ -622,7 +674,7 @@ def _(
             # pulls in <cfloat> / <cstdint> implicitly.
             _flags = "-include cfloat -include cstdint"
             _append = (_env.get("NVCC_APPEND_FLAGS", "") + " " + _flags).strip()
-            pip_install(["--no-build-isolation", "-e", str(path)], env={**_env, "NVCC_APPEND_FLAGS": _append})
+            pip_install(["--no-build-isolation", *args], env={**_env, "NVCC_APPEND_FLAGS": _append})
             deviations.append(
                 {
                     "what": f"{label}: built with NVCC_APPEND_FLAGS='{_flags}'",
@@ -635,10 +687,16 @@ def _(
     try:
         build_info = {
             "cuda_option": CUDA_OPTION,
-            "simple_knn": _build(R2G_DIR / "r2_gaussian" / "submodules" / "simple-knn", "simple-knn"),
+            # Module names as imported by R2-Gaussian at commit f2579bf:
+            # gaussian_model.py `from simple_knn._C import distCUDA2`,
+            # render_query.py `from xray_gaussian_rasterization_voxelization import (...)`.
+            "simple_knn": _build(
+                R2G_DIR / "r2_gaussian" / "submodules" / "simple-knn", "simple-knn", "simple_knn._C"
+            ),
             "xray_rasterizer_voxelizer": _build(
                 R2G_DIR / "r2_gaussian" / "submodules" / "xray-gaussian-rasterization-voxelization",
                 "xray-gaussian-rasterization-voxelization",
+                "xray_gaussian_rasterization_voxelization",
             ),
         }
         # TIGRE Python package (pyproject.toml is at the repo root at this commit).
