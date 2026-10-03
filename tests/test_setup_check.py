@@ -201,3 +201,18 @@ def test_notebook_cell_wiring():
         loaded = {n.id for n in ast.walk(c) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
         missing = {x for x in loaded & set(returned) if x not in params and x not in stored}
         assert not missing, f"cell at line {c.lineno} reads {missing} without taking them as inputs"
+
+
+def test_first_compiler_error():
+    log = (
+        "Building wheel for simple_knn\n"
+        "  error: subprocess-exited-with-error\n"
+        "/x/simple_knn.cu:18:10: fatal error: cub/cub.cuh: No such file or directory\n"
+        "/x/other.cu(42): error: identifier \"foo\" is undefined\n"
+        "ERROR: Failed building wheel for simple_knn\n"
+    )
+    assert sc.first_compiler_error(log) == "/x/simple_knn.cu:18:10: fatal error: cub/cub.cuh: No such file or directory"
+    assert sc.first_compiler_error("ModuleNotFoundError: No module named 'torch'\n").startswith("ModuleNotFoundError")
+    assert sc.first_compiler_error("nvcc fatal   : Unsupported gpu architecture 'compute_120'").startswith("nvcc fatal")
+    assert sc.first_compiler_error("all good") is None
+    assert sc.first_compiler_error(None) is None

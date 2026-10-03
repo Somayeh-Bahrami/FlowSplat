@@ -165,31 +165,30 @@ def _(os, shutil, subprocess, sys):
         proc.wait()
         out = "".join(lines)
         if check and proc.returncode != 0:
-            raise RuntimeError(f"Command failed ({proc.returncode}): {' '.join(str(c) for c in cmd[:4])} ...")
+            err = RuntimeError(f"Command failed ({proc.returncode}): {' '.join(str(c) for c in cmd[:4])} ...")
+            err.output = out  # full log, so the caller can report the first compiler error
+            raise err
         return out
 
-    def pip_install(args, cwd=None, env=None, check=True):
+    def pip_install(args, cwd=None, env=None, check=True, shadow=False):
         """pip install into the notebook's interpreter (uv if pip is missing).
+
+        shadow=True installs a fresh copy into this interpreter's own
+        site-packages even when the package is already visible from the
+        system site-packages (pip --ignore-installed, uv --reinstall). Used
+        for the Option B torch, because the image's torch sits outside the
+        venv and can be neither uninstalled nor upgraded from inside it.
 
         Ref: OURS (tooling).
         """
         has_pip = subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0
         if has_pip:
-            cmd = [sys.executable, "-m", "pip", "install", *args]
+            cmd = [sys.executable, "-m", "pip", "install", *(["--ignore-installed"] if shadow else []), *args]
         elif shutil.which("uv"):
-            cmd = ["uv", "pip", "install", "--python", sys.executable, *args]
+            cmd = ["uv", "pip", "install", "--python", sys.executable, *(["--reinstall"] if shadow else []), *args]
         else:
             raise RuntimeError("Neither pip nor uv is available in this environment.")
         return sh(cmd, cwd=cwd, env=env, check=check)
-
-    def pip_uninstall(names):
-        """Uninstall packages from the notebook's interpreter (uv if pip is missing).
-
-        Ref: OURS (tooling). Used only for the Option B torch switch.
-        """
-        if subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0:
-            return sh([sys.executable, "-m", "pip", "uninstall", "-y", *names], check=False)
-        return sh(["uv", "pip", "uninstall", "--python", sys.executable, *names], check=False)
 
     def clone_pinned(url, commit, dest, env=None, secret=None):
         """Clone `url` into `dest` and check out exactly `commit` (with submodules).
@@ -220,7 +219,7 @@ def _(os, shutil, subprocess, sys):
         ).returncode == 0
         return a and b
 
-    return clone_pinned, pip_install, pip_uninstall, sh, source_untouched
+    return clone_pinned, pip_install, sh, source_untouched
 
 
 @app.cell
@@ -282,7 +281,7 @@ def _(AUTORUN, FLOWSPLAT_URL, Path, WORK, mo, os, run_btn, sh, sys, token_box):
 
 
 @app.cell
-def _(WORK, flowsplat_commit, json, os, pip_install, pip_uninstall, setup_check, shutil, subprocess, sys):
+def _(Path, WORK, flowsplat_commit, json, mo, os, pip_install, setup_check, shutil, subprocess, sys):
     # c) torch version, CUDA version, GPU name, compute capability, and ONE
     # CUDA_HOME whose nvcc has the same CUDA version as torch.
     #
@@ -303,18 +302,34 @@ def _(WORK, flowsplat_commit, json, os, pip_install, pip_uninstall, setup_check,
     _B_TORCH_CUDA = "12.8"
     _B_INDEX = "https://download.pytorch.org/whl/cu128"
 
+    _venv_sites = list(dict.fromkeys([_sysconfig.get_paths()["purelib"], _sysconfig.get_paths()["platlib"]]))
     if CUDA_OPTION == "B":
-        # torch must be switched before it is imported in this process.
-        _current = None
-        try:
-            import importlib.metadata as _md
-
-            _current = _md.version("torch")
-        except Exception:
-            pass
-        if _current is None or "+cu128" not in _current:
-            pip_uninstall(["torch", "torchvision"])
-            pip_install(["torch", "torchvision", "--index-url", _B_INDEX])
+        # The image's torch (cu130) is in the system site-packages, outside
+        # this venv: pip can neither uninstall nor replace it. So a cu128 copy
+        # is installed INTO the venv and put first on the path (also for the
+        # build subprocesses, via PYTHONPATH) so that it shadows the system one.
+        for _p in reversed(_venv_sites):
+            if _p in sys.path:
+                sys.path.remove(_p)
+            sys.path.insert(0, _p)
+        os.environ["PYTHONPATH"] = os.pathsep.join(
+            [*_venv_sites, *[x for x in os.environ.get("PYTHONPATH", "").split(os.pathsep) if x]]
+        )
+        _venv_torch = [d for site in _venv_sites for d in Path(site).glob("torch-*.dist-info")]
+        _have_cu128 = any("+cu128" in d.name for d in _venv_torch)
+        if not _have_cu128:
+            if os.environ.get("FLOWSPLAT_B_RESTARTED") == "1":
+                raise RuntimeError(f"Option B: torch cu128 still not in the venv {_venv_sites} after install and restart.")
+            # All deps go into the venv too (cu12 NVIDIA libraries are not in
+            # the image), so torch and its CUDA libraries come from one index.
+            pip_install(["torch", "torchvision", "--index-url", _B_INDEX], shadow=True)
+            # A fresh process, so no stale import state from the system torch.
+            print("Option B: torch cu128 installed into the venv. Restarting the Python process.", flush=True)
+            if mo.app_meta().mode == "script":
+                os.environ["FLOWSPLAT_B_RESTARTED"] = "1"
+                sys.stdout.flush()
+                os.execv(sys.executable, [sys.executable, *sys.argv])
+            raise RuntimeError("Option B: torch cu128 installed into the venv. Restart the marimo kernel and press Run again.")
     try:
         import torch
     except ImportError:
@@ -324,20 +339,38 @@ def _(WORK, flowsplat_commit, json, os, pip_install, pip_uninstall, setup_check,
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available to torch. Apply the Step 0.1 fallback (another cloud GPU).")
-    if CUDA_OPTION == "B" and not setup_check.same_cuda(torch.version.cuda, _B_TORCH_CUDA):
-        raise RuntimeError(f"Option B expected torch with CUDA {_B_TORCH_CUDA}, got {torch.version.cuda}.")
+    # Which torch copy was loaded, and from where.
+    print("sys.executable:", sys.executable)
+    print("sys.path (in order):")
+    for _i, _p in enumerate(sys.path):
+        print(f"  [{_i}] {_p}")
+    print("torch.__file__:", torch.__file__)
+    print("torch:", torch.__version__, "| CUDA", torch.version.cuda, "| arch list", torch.cuda.get_arch_list())
+    _cap = torch.cuda.get_device_capability(0)
+    _arch = f"sm_{_cap[0]}{_cap[1]}"
+    if CUDA_OPTION == "B":
+        if torch.version.cuda != _B_TORCH_CUDA:
+            raise RuntimeError(
+                f"Option B expected torch with CUDA {_B_TORCH_CUDA}, got {torch.version.cuda} from {torch.__file__}. "
+                "See sys.path above: the venv copy must come before the system site-packages."
+            )
+        if _arch not in torch.cuda.get_arch_list():
+            raise RuntimeError(f"Option B torch {torch.__version__} has no {_arch} in its arch list.")
+    if _saved.get("first_error"):
+        print("Option A failed with:", _saved["first_error"])
     if CUDA_OPTION == "B":
         deviations.append(
             {
                 "what": f"Option B: torch {torch.__version__} + torchvision from {_B_INDEX}, CUDA {_B_TORCH_CUDA} pip toolkit",
                 "instead_of": "the image's torch (CUDA 13) with a CUDA 13 toolkit (Option A)",
-                "reason": "Option A build failed: " + str(_saved.get("reason", "forced by FLOWSPLAT_CUDA_OPTION"))[:300]
-                + ". Blackwell sm_120 is supported in CUDA 12.8. No source change.",
+                "reason": "Option A build failed: "
+                + str(_saved.get("first_error") or _saved.get("reason", "forced by FLOWSPLAT_CUDA_OPTION"))[:300]
+                + f". Installed into the venv with --ignore-installed so it shadows the image's torch in the system "
+                f"site-packages; torch loaded from {torch.__file__}. Blackwell sm_120 is supported in CUDA 12.8. "
+                "No source change.",
             }
         )
 
-    _cap = torch.cuda.get_device_capability(0)
-    _arch = f"sm_{_cap[0]}{_cap[1]}"
     _torch_cuda = torch.version.cuda
 
     def _run(cmd):
@@ -376,7 +409,8 @@ def _(WORK, flowsplat_commit, json, os, pip_install, pip_uninstall, setup_check,
             _home = setup_check.find_pip_cuda_home(_sites)
         else:
             _home = setup_check.merge_cuda_prefixes(
-                setup_check.find_pip_cuda12_prefixes(_sites), WORK / f"cuda-{_torch_cuda}"
+                # venv only: the system site-packages hold the image's CUDA 13 libraries.
+                setup_check.find_pip_cuda12_prefixes(_venv_sites), WORK / f"cuda-{_torch_cuda}"
             )
         if _home is not None and (_home / "bin" / "nvcc").exists():
             _links = setup_check.prepare_pip_cuda_home(_home)
@@ -416,6 +450,9 @@ def _(WORK, flowsplat_commit, json, os, pip_install, pip_uninstall, setup_check,
         "gpu_memory_gb": round(torch.cuda.get_device_properties(0).total_memory / 2**30, 1),
         "driver": _run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"]),
         "cuda_option": CUDA_OPTION,
+        "option_a_first_error": _saved.get("first_error"),
+        "torch_file": torch.__file__,
+        "sys_path": list(sys.path),
         "nvcc_path": _nvcc,
         "nvcc_rejected": _rejected,
         "cuda_toolkit_source": _toolkit_source,
@@ -520,6 +557,7 @@ def _(
     os,
     pins,
     pip_install,
+    setup_check,
     sys,
     time,
 ):
@@ -591,6 +629,8 @@ def _(
         build_info["tigre"] = "plain"
     except RuntimeError as _e:
         if CUDA_OPTION == "B":
+            print("\n=== Option B failed. First compiler error line: ===")
+            print(setup_check.first_compiler_error(getattr(_e, "output", "")) or "(none found; see the log above)")
             raise RuntimeError(
                 "Option B (torch cu128 + CUDA 12.8) build failed too. Plan fallback: \"If the CUDA rasterizer "
                 "will not build: another cloud GPU. If nothing works by Oct 4: plain PyTorch Gaussian splatter "
@@ -598,10 +638,14 @@ def _(
             ) from _e
         # Option A failed: switch to Option B. torch cannot be swapped inside a
         # running process, so the choice is saved and the run restarts.
+        _first = setup_check.first_compiler_error(getattr(_e, "output", ""))
+        print("\n=== Option A failed. First compiler error line: ===")
+        print(_first or "(no compiler error line found; see the build log above)")
         CUDA_OPTION_FILE.write_text(
             json.dumps(
                 {
                     "option": "B",
+                    "first_error": _first,
                     "reason": f"Option A build failed ({_e}); see the build log above",
                     "date_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 }
@@ -610,6 +654,10 @@ def _(
         print(f"\n=== Option A build failed. Saved Option B to {CUDA_OPTION_FILE}. ===")
         if mo.app_meta().mode == "script":
             print("Restarting the script with Option B (torch cu128 + CUDA 12.8 toolkit).", flush=True)
+            # Drop the CUDA 13 build variables of Option A so they do not leak
+            # into the CUDA 12.8 builds of the restarted process.
+            for _k in CUDA_ENV:
+                os.environ.pop(_k, None)
             sys.stdout.flush()
             os.execv(sys.executable, [sys.executable, *sys.argv])
         raise RuntimeError(

@@ -308,3 +308,26 @@ def find_include_dir(roots, header: str = "cub/cub.cuh") -> Path | None:
             best = min(hits, key=lambda p: len(p.parts))
             return Path(*best.parts[: -len(parts)])
     return None
+
+
+def first_compiler_error(log: str | None) -> str | None:
+    """First compiler error line of a failed build log, or None.
+
+    Order: a line that names a source file and says "error" (gcc / nvcc
+    style "file.cu:18: fatal error: ..."), then "nvcc fatal", then the first
+    line with "error:" or "Error" that is not pip's own summary.
+
+    Ref: OURS (tooling). Used to report why an Option A build failed.
+    """
+    lines = [l.strip() for l in (log or "").splitlines() if l.strip()]
+    pip_noise = re.compile(r"subprocess-exited-with-error|Failed building|failed-wheel-build|^ERROR: ", re.I)
+    patterns = [
+        re.compile(r"\.(cu|cuh|cpp|cc|c|h|hpp)(\(\d+\)|:\d+)[^ ]*.*\berror\b", re.I),
+        re.compile(r"nvcc fatal", re.I),
+        re.compile(r"\berror\b\s*[:#]|\w+Error\b"),
+    ]
+    for pat in patterns:
+        for line in lines:
+            if pat.search(line) and not pip_noise.search(line):
+                return line
+    return None
