@@ -2,7 +2,7 @@
 
 How to get the GPU environment for FlowSplat running. Verified on molab on
 Oct 3, 2026 (repo `11a482a`): R2-Gaussian builds and reproduces its example
-case (PSNR 3D 35.146 vs 35.09 dB), TIGRE forward projection passes. Full
+case (PSNR 3D 35.146 vs 35.09 dB), TIGRE forward projection passes. ImageCAS case 11 vessel tree reconstructed with Dice 0.977 (Oct 3). Full
 record: `results/step0.1.json`, report: `reports/step0.1.md`.
 
 ## Where things run

@@ -1,7 +1,7 @@
 # Step 0.1: GPU environment and code base
 
-Dates: Sep 30 to Oct 4, 2026. Status: **build and reproduction done; DoD
-not met** (open items below). Results from the molab run of Oct 3, 2026,
+Dates: Sep 30 to Oct 4, 2026. Status: **done, DoD met** (Oct 3, 2026).
+ImageCAS vessel run: Oct 3, 17:57 UTC, record `results/step0.1_imagecas.json`. Results from the molab run of Oct 3, 2026,
 05:23 UTC, repo at `11a482a`, exit code 0. Raw record:
 `results/step0.1.json`.
 
@@ -143,13 +143,16 @@ R2-Gaussian are reported too.
 
 | Item | Value |
 |---|---|
-| ImageCAS case | TODO |
-| Cube side / voxel size | TODO |
-| PSNR 3D / SSIM 3D | TODO |
-| Dice | TODO |
-| Training time | TODO |
-| Figure | `results/step0.1_imagecas.png` (TODO) |
-| Pass | TODO |
+| ImageCAS case | 11 (`11.label.nii.gz`, 512 x 512 x 275, spacing 0.33 x 0.33 x 0.5 mm); largest component 37,886 voxels |
+| Cube side / voxel size | 94.05 mm / 0.367 mm (256^3) |
+| PSNR 3D / SSIM 3D | 45.17 dB / 0.998 (inflated by the empty background; see Dice) |
+| PSNR 2D / SSIM 2D, test views (100) | 47.38 dB / 0.874 |
+| PSNR 2D / SSIM 2D, train views (50) | 44.90 dB / 0.958 |
+| Dice (pred > 0.5 vs GT > 0.5) | **0.977** |
+| Training time | 5.5 min (30k iterations) |
+| Deviation | `initialize_pcd.py --n_points 26163` instead of 50000 (52,326 GT voxels above 0.05). CLI flag only |
+| Figure | `results/step0.1_imagecas.png`: MIPs along x, y, z; prediction matches GT, differences only at the vessel wall |
+| Pass | **yes** (Dice 0.977 >= 0.7, prediction finite) |
 
 ## Changes to the original code
 
@@ -180,12 +183,11 @@ renders correctly; OpenReview profile active; data-request emails sent."
 | DoD part | Met |
 |---|---|
 | R2-Gaussian builds and reproduces its example case on molab | **Yes** (PSNR 3D 35.146 vs 35.09 dB, +0.056 dB; TIGRE check passes) |
-| Static reconstruction of one ImageCAS vessel renders correctly | TODO (notebook written, molab run pending) |
+| Static reconstruction of one ImageCAS vessel renders correctly | **Yes** (case 11, Dice 0.977, PSNR 3D 45.17 dB, figure) |
 | OpenReview profile active | **Yes** (owner, Oct 3) |
 | Data-request emails sent | **Yes** (owner, Oct 3) |
 
-**DoD met: no (one item left).** CUDA build, OpenReview and emails are
-done; the ImageCAS vessel run is pending.
+**DoD met: yes.**
 
 **Fallback used: no.** The rasterizer builds and runs on molab, so the
 fallback below is not triggered (Oct 4 setup gate condition "CUDA rasterizer
@@ -196,13 +198,14 @@ project."
 
 ## Still open
 
-1. **ImageCAS vessel (DoD).** Notebook written; needs one ImageCAS label
-   file on molab and a run.
-2. **4DRGS on case2 (plan bullet).** Its rasterizer submodule fails on the
+Not part of the DoD:
+
+1. **4DRGS on case2 (plan bullet).** Its rasterizer submodule fails on the
    missing `<cstdint>`. Same build-flag retry as the R2-Gaussian rasterizer
-   should fix it (not yet in the 4DRGS cell).
-3. **CADICA download:** skipped so far.
-4. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
+   should fix it (not yet in the 4DRGS cell). Needed by Step 4.1 (baseline 1,
+   Oct 27), not by Step 1.1.
+2. **CADICA download:** skipped so far.
+3. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
    which split each is: UNVERIFIED. TIGRE version string not recorded.
 
 ## Not verified

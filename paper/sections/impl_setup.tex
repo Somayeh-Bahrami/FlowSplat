@@ -1,0 +1,21 @@
+% Step 0.1: implementation details (environment and rasterizer check).
+% Numbers from results/step0.1.json and results/step0.1_imagecas.json.
+% Bib keys to add to the .bib: zha2024r2gaussian, biguri2016tigre, zeng2023imagecas.
+
+\paragraph{Implementation details.}
+We build on the official R$^2$-Gaussian code~\cite{zha2024r2gaussian}, whose
+X-ray rasterizer and voxelizer we use without source modification, and on
+TIGRE~\cite{biguri2016tigre} for cone-beam forward projection and FDK
+initialization. All experiments run on a single NVIDIA RTX PRO 6000 Blackwell
+GPU (compute capability 12.0) with PyTorch 2.11 and CUDA 13.0; the CUDA
+extensions are compiled for this architecture with build flags only.
+As a sanity check of this environment, R$^2$-Gaussian trained on its own
+50-view synthetic chest case reaches a 3D PSNR of 35.15\,dB, against
+35.09\,dB reported by the authors, in 13 minutes.
+To confirm that the rasterizer handles thin vascular structures, we
+reconstruct one coronary tree from ImageCAS~\cite{zeng2023imagecas}: the
+largest connected component of the expert label of case 11 is resampled to a
+$256^3$ volume of 0.37\,mm voxels, projected with the R$^2$-Gaussian cone-beam
+protocol (50 views over $360^\circ$, Poisson and Gaussian noise), and
+reconstructed with default settings. The result recovers the vessel with a
+Dice score of 0.977 and a 3D PSNR of 45.17\,dB in 5.5 minutes.
