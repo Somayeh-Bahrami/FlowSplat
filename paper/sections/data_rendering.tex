@@ -1,0 +1,31 @@
+% Step 1.2: bolus simulation and rotational DSA rendering.
+% Numbers from results/step1.2_bolus_summary.json, results/step1.2_render_summary.json.
+% Bib keys to add to the .bib: thakur2026punch, liu2025fourdrgs, biguri2016tigre, zha2024r2gaussian.
+
+\paragraph{Contrast transport.}
+To avoid an inverse crime, the data are generated with a transport model
+that is richer than the plug flow used by FlowSplat. For each case we solve
+the area-aware one-dimensional advection--dispersion equation of
+PUNCH~\cite{thakur2026punch} at the resting flow, in conservative form
+$\partial_t(Ac) + \partial_s(Qc) = \partial_s(AD\,\partial_s c)$, on a
+0.1\,mm grid with a second-order limited finite-volume scheme. The
+dispersion coefficient is drawn log-uniformly over one decade around
+$10^{-6}$\,m$^2$/s~\cite{thakur2026punch}, and the inlet is a gamma-variate
+bolus with randomized arrival time and shape, perturbed by 5\,\% smooth
+multiplicative noise. In all cases both wash-in and wash-out occur within
+the acquisition.
+
+\paragraph{Rotational DSA.}
+Projections follow the geometry of 4DRGS~\cite{liu2025fourdrgs}: 133
+frames evenly spaced over $198^\circ$, with source-to-object and
+source-to-detector distances of 750\,mm and 1200\,mm. We assume a sweep
+duration of 4.4\,s, so that each frame is acquired at its own angle and
+time. For every frame the lumen,
+voxelized at 0.25\,mm with partial volume from the centerline and the
+stenosed radius, is filled with the simulated concentration and projected
+with TIGRE~\cite{biguri2016tigre} onto a detector with 0.64\,mm pixels;
+Poisson and Gaussian noise are added as in
+R$^2$-Gaussian~\cite{zha2024r2gaussian}. Training subsets use 30, 60 or
+all 133 evenly spaced views, the remaining frames serving as held-out
+views. The 200 cases are split by patient into 140 training, 30
+validation and 30 test cases.

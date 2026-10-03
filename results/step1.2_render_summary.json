@@ -1,0 +1,15 @@
+{
+  "note": "Compact copy of the molab summary (full per-case rows are in results/step1.2_render_summary.json on molab).",
+  "timestamp_utc": "2026-10-03T23:25:32Z",
+  "repo_commit": "89ac4d9",
+  "n_rendered": 200,
+  "render_minutes": 25.5,
+  "seconds_per_case": {"min": 2.1, "max": 12.8},
+  "total_gb": 2.86,
+  "mb_per_case": {"min": 7.0, "max": 19.8},
+  "frames": 133,
+  "detector_px": {"nv": [116, 302], "nu": [196, 306]},
+  "proj_max": {"min": 0.442, "max": 4.039, "max_case": "130_1"},
+  "spot_cases": ["121_0", "122_0", "130_0", "131_0", "135_0"],
+  "spot_check": "all 5 checked visually by the owner on Oct 3: bolus visibly advancing (same pattern as 121_0); 109_0 and 121_0 also checked by Claude"
+}

@@ -1,7 +1,6 @@
 # Step 1.2: Bolus simulation and TIGRE rendering
 
-Dates: Oct 8 to Oct 11, 2026 (started Oct 3). Status: **in progress**: bolus
-simulation and splits done on the M4; rendering on molab pending.
+Dates: Oct 8 to Oct 11, 2026 (done early, Oct 3). Status: **done, DoD met.**
 
 Plan DoD: "All cases rendered; 5 cases spot-checked visually (bolus visibly
 advancing along the vessel); fixed split lists saved."
@@ -76,14 +75,46 @@ splits).
 
 ## Rendering (molab)
 
-TODO.
+Notebook `notebooks/step1_render.py` (repo `89ac4d9`), run on molab Oct 3;
+compact record `results/step1.2_render_summary.json`.
+
+| Quantity | Value |
+|---|---|
+| Cases rendered | **200 / 200** (133 frames each) |
+| Time | 25.5 min in total, 2.1 to 12.8 s per case (plus a 2-case trial) |
+| Storage | 2.86 GB (float16), 7.0 to 19.8 MB per case |
+| Detector | 116 to 302 x 196 to 306 px at 0.64 mm (sized per case) |
+| Peak projection value | 0.44 to 4.04 (max in 130_1: a tortuous segment seen end-on; mu 0.1 /mm means 40 mm of contrast along one ray) |
+
+Detector size differs by up to 2 px between cases of one patient (box
+depends on the stenosed radius); every case stores its own geometry in
+`meta`.
+
+Spot check (`results/step1.2_spot_*.png` on molab: 6 frames at increasing
+time and angle plus the kymograph): 121_0, 122_0, 130_0, 131_0, 135_0 (val
+patients). All five checked visually by the owner: empty first frame,
+contrast entering at the ostium, full LAD, then wash-out from proximal to
+distal, consistent with the kymograph. 109_0 (trial) and 121_0 also checked
+by Claude. Darker segments are vessel parts lying along the ray at that
+angle (foreshortening).
 
 ## DoD
 
 | DoD part | Met |
 |---|---|
-| All cases rendered | TODO (molab) |
-| 5 cases spot-checked visually | TODO (molab figures; kymographs on the M4 already show the bolus advancing) |
-| Fixed split lists saved | **Yes** (`results/splits_v1.json`) |
+| All cases rendered | **Yes**: 200 / 200 |
+| 5 cases spot-checked visually (bolus visibly advancing) | **Yes**: 121_0, 122_0, 130_0, 131_0, 135_0 (owner, Oct 3) |
+| Fixed split lists saved | **Yes**: `results/splits_v1.json` (140 / 30 / 30 cases) |
 
-**DoD met: no (in progress). Fallback used: no.**
+**DoD met: yes. Fallback used: no** (3D lumen mapping was fast enough:
+2 to 13 s per case on the GPU).
+
+## Open, for the owner's review
+
+- Choices marked OURS: contrast attenuation mu = 0.1 /mm, 0.64 mm detector
+  pixel (0.4 mm at the isocentre; the Step 2.2 DoD asks for 0.2 mm stenosis
+  accuracy), inlet ranges and inlet noise, numerical scheme.
+- Sweep duration 4.4 s is from the plan; 4DRGS gives no duration.
+- Rendered data lives on molab (`~/flowsplat_work/data/render_v1`, 2.86 GB);
+  a fresh molab session needs the pack re-uploaded and a re-render (25 min)
+  unless the data is kept elsewhere.
