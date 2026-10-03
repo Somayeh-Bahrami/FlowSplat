@@ -405,20 +405,37 @@ def _(Path, WORK, flowsplat_commit, json, mo, os, pip_install, setup_check, shut
         _specs = setup_check.pip_cuda_specs(_torch_cuda)
         pip_install(_specs)
         _sites = [_sysconfig.get_paths()["purelib"], _sysconfig.get_paths()["platlib"], *_site.getsitepackages()]
-        if int(_torch_cuda.split(".")[0]) >= 13:
-            _home = setup_check.find_pip_cuda_home(_sites)
+        _major = int(_torch_cuda.split(".")[0])
+        if _major >= 13:
+            # The matching nvcc lands in the venv's nvidia/cu13, but cudart
+            # (cuda_runtime.h, libcudart) stays in the system's nvidia/cu13,
+            # where torch's copy already satisfies the pin. Merge them into
+            # one CUDA_HOME by symlinks, venv first so its nvcc 13.0 wins.
+            _home = setup_check.merge_cuda_prefixes(
+                setup_check.find_pip_cuda_prefixes([*_venv_sites, *_sites], _major), WORK / f"cuda-{_torch_cuda}"
+            )
         else:
             _home = setup_check.merge_cuda_prefixes(
                 # venv only: the system site-packages hold the image's CUDA 13 libraries.
                 setup_check.find_pip_cuda12_prefixes(_venv_sites), WORK / f"cuda-{_torch_cuda}"
             )
-        if _home is not None and (_home / "bin" / "nvcc").exists():
+            if not (_home / "bin" / "nvcc").exists():
+                raise RuntimeError(
+                    "Option B: no nvcc for CUDA 12.8 on PyPI. The wheel nvidia-cuda-nvcc-cu12 12.8.93 ships only "
+                    "ptxas, crt headers and libnvvm, not the nvcc driver (file list checked Oct 3, 2026). "
+                    "A CUDA 12.8 nvcc would need another source (conda or NVIDIA runfile), which is a decision "
+                    "for the user. Plan fallback: \"If the CUDA rasterizer will not build: another cloud GPU. If "
+                    "nothing works by Oct 4: plain PyTorch Gaussian splatter (slower, no custom CUDA). Do not "
+                    "change the project.\""
+                )
+        if (_home / "bin" / "nvcc").exists():
             _links = setup_check.prepare_pip_cuda_home(_home)
             _nvcc = str(_home / "bin" / "nvcc")
             _toolkit_source = f"pip ({', '.join(_specs)})"
             deviations.append(
                 {
-                    "what": f"CUDA compiler installed from pip: {', '.join(_specs)}; CUDA_HOME = {_home}",
+                    "what": f"CUDA compiler installed from pip: {', '.join(_specs)}; CUDA_HOME = {_home} "
+                    "(symlink tree: venv nvcc prefix first, then the system prefix with cudart)",
                     "instead_of": "a system CUDA toolkit, as the READMEs assume",
                     "reason": "The molab image has no matching nvcc. Pinned to the CUDA version of the installed torch "
                     f"({_torch_cuda}); rejected: {_rejected or 'none'}. "

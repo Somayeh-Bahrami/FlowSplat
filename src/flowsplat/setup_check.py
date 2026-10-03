@@ -144,28 +144,6 @@ def cube_center_ray_integral(side_mm: float, mu: float = 1.0) -> float:
     return mu * side_mm
 
 
-def find_pip_cuda_home(site_dirs) -> Path | None:
-    """Find a CUDA toolkit root installed by NVIDIA's pip wheels.
-
-    The CUDA 13 wheels (nvidia-cuda-nvcc, nvidia-cuda-runtime, ...) all unpack
-    into one prefix, <site-packages>/nvidia/cu13/{bin,include,lib}, so that
-    folder can serve as CUDA_HOME. Returns the first prefix that holds
-    bin/nvcc, or None.
-
-    Ref: OURS (tooling). Layout read from the file lists of the wheels
-    nvidia_cuda_nvcc-13.0.88 and nvidia_cuda_runtime-13.0.96 on PyPI
-    (Oct 2, 2026).
-    """
-    for site in site_dirs:
-        base = Path(site) / "nvidia"
-        if not base.is_dir():
-            continue
-        for prefix in sorted(base.glob("cu*"), reverse=True):
-            if (prefix / "bin" / "nvcc").exists():
-                return prefix
-    return None
-
-
 def prepare_pip_cuda_home(cuda_home) -> list:
     """Make a pip-installed CUDA prefix usable by setup.py builds.
 
@@ -193,7 +171,10 @@ def prepare_pip_cuda_home(cuda_home) -> list:
     if bin_dir.is_dir():
         for f in bin_dir.iterdir():
             if f.is_file():
-                f.chmod(f.stat().st_mode | 0o111)
+                try:
+                    f.chmod(f.stat().st_mode | 0o111)
+                except OSError:  # read-only system file behind a symlink; already executable
+                    pass
     return created
 
 
@@ -226,8 +207,10 @@ def pip_cuda_specs(torch_cuda: str) -> list:
     own nvidia/<component> folder).
 
     Ref: OURS (tooling). Package names from PyPI: cuda-toolkit 13.0.2 extras;
-    nvidia-cuda-nvcc-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-cccl-cu12
-    (12.8 file layout UNVERIFIED, checked on molab at run time).
+    nvidia-cuda-nvcc-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-cccl-cu12.
+    File lists checked Oct 3, 2026: nvidia-cuda-nvcc-cu12 12.8.93 has
+    bin/ptxas, include/crt, nvvm/ but NO nvcc binary, so CUDA 12.8 cannot be
+    built from pip alone.
     """
     major_minor = ".".join(torch_cuda.split(".")[:2])
     if int(major_minor.split(".")[0]) >= 13:
@@ -331,3 +314,24 @@ def first_compiler_error(log: str | None) -> str | None:
             if pat.search(line) and not pip_noise.search(line):
                 return line
     return None
+
+
+def find_pip_cuda_prefixes(site_dirs, major: int) -> list:
+    """All unified CUDA pip prefixes <site>/nvidia/cu<major>, in site order.
+
+    With CUDA 13 the image keeps torch's CUDA libraries (cudart headers
+    included) in the system site-packages, while the matching nvcc is
+    installed into the venv. Both are nvidia/cu13 folders; together they form
+    one toolkit. Duplicates (same real path) are dropped.
+
+    Ref: OURS (tooling). Seen on molab, Oct 3: nvcc 13.0 in
+    /tmp/uv-venv/.../nvidia/cu13, cuda_runtime.h only in
+    /usr/local/lib/python3.13/site-packages/nvidia/cu13.
+    """
+    found, seen = [], set()
+    for site in site_dirs:
+        p = Path(site) / "nvidia" / f"cu{major}"
+        if p.is_dir() and os.path.realpath(p) not in seen:
+            seen.add(os.path.realpath(p))
+            found.append(p)
+    return found

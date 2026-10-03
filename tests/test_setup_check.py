@@ -97,24 +97,6 @@ def test_notebook_pins_are_full_commit_hashes():
         assert len(value) == 40 and all(c in "0123456789abcdef" for c in value)
 
 
-def test_find_and_prepare_pip_cuda_home(tmp_path):
-    assert sc.find_pip_cuda_home([tmp_path]) is None
-    home = tmp_path / "nvidia" / "cu13"
-    (home / "bin").mkdir(parents=True)
-    (home / "lib").mkdir()
-    (home / "bin" / "nvcc").write_text("#!/bin/sh\n")
-    (home / "lib" / "libcudart.so.13").write_text("")
-    (home / "lib" / "libcudart_static.a").write_text("")
-    assert sc.find_pip_cuda_home([tmp_path / "missing", tmp_path]) == home
-
-    created = sc.prepare_pip_cuda_home(home)
-    assert (home / "lib" / "libcudart.so").is_symlink()
-    assert (home / "lib64" / "libcudart.so").exists()
-    assert len(created) == 2
-    assert (home / "bin" / "nvcc").stat().st_mode & 0o111
-    assert sc.prepare_pip_cuda_home(home) == []  # second call changes nothing
-
-
 def test_nvcc_release_and_same_cuda():
     text = "nvcc: NVIDIA (R) Cuda compiler driver\nCuda compilation tools, release 13.3, V13.3.12\n"
     assert sc.nvcc_release(text) == "13.3"
@@ -216,3 +198,30 @@ def test_first_compiler_error():
     assert sc.first_compiler_error("nvcc fatal   : Unsupported gpu architecture 'compute_120'").startswith("nvcc fatal")
     assert sc.first_compiler_error("all good") is None
     assert sc.first_compiler_error(None) is None
+
+
+def test_merge_venv_and_system_cu13(tmp_path):
+    """molab layout: matching nvcc in the venv, cudart headers only in the system prefix."""
+    venv = tmp_path / "venv" / "nvidia" / "cu13"
+    system = tmp_path / "system" / "nvidia" / "cu13"
+    for root, rel, text in [
+        (venv, "bin/nvcc", "13.0"),
+        (venv, "include/crt/host_config.h", "13.0"),
+        (venv, "include/cccl/cub/cub.cuh", ""),
+        (system, "bin/nvcc", "13.3"),
+        (system, "include/crt/host_config.h", "13.3"),
+        (system, "include/cuda_runtime.h", ""),
+        (system, "lib/libcudart.so.13", ""),
+    ]:
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    sites = [tmp_path / "venv", tmp_path / "venv", tmp_path / "system", tmp_path / "missing"]
+    prefixes = sc.find_pip_cuda_prefixes(sites, 13)
+    assert prefixes == [venv, system]
+    home = sc.merge_cuda_prefixes(prefixes, tmp_path / "cuda-13.0")
+    assert (home / "bin" / "nvcc").read_text() == "13.0"  # venv wins
+    assert (home / "include" / "crt" / "host_config.h").read_text() == "13.0"
+    assert (home / "include" / "cuda_runtime.h").exists()
+    sc.prepare_pip_cuda_home(home)
+    assert (home / "lib64" / "libcudart.so").exists()
+    assert sc.find_include_dir([home]) == home / "include" / "cccl"
