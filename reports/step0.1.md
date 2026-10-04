@@ -209,7 +209,9 @@ Not part of the DoD:
    submodules built (with the cstdint flag), data downloaded, but train.py
    stops at `import leapctype` (4DRGS imports the LEAP toolbox even with
    --fdk_toolbox=tigre). LEAP is now cloned (pinned `0c8846f`) and built as
-   in the 4DRGS README; attempt 2 pending.
+   in the 4DRGS README. Attempt 2 (Oct 4, repo `c83190b`,
+   `results/step0.1_4drgs_attempt2.json`): `bash ./etc/build.sh` of LEAP
+   failed; the compiler error is not in the saved JSON (log needed).
 
 ## Not verified
 

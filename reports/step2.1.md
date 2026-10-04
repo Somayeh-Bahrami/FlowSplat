@@ -1,9 +1,7 @@
 # Step 2.1: Geometry initialisation and tube-aligned Gaussians
 
-Dates: Oct 12 to Oct 14, 2026 (started Oct 3). Status: **in progress**:
-plan route failed the DoD (run 1); fallback (FDK skeleton) meets the DoD as
-written (run 2) but missed one lesion; hysteresis fix failed (run 3) and is
-reverted; run 4 (run-2 extraction with the 4DRGS view subsets) pending.
+Dates: Oct 12 to Oct 14, 2026 (done early, Oct 4). Status: **done, DoD met
+with the plan's fallback** (FDK volume skeleton), one documented limitation.
 
 Plan DoD: "Lumen radius error below 0.2 mm on 5 validation cases."
 
@@ -126,16 +124,48 @@ Worse than run 2 (mean MAE 0.21 mm, 3 of 5 above 0.2 mm). The 121_0 figure
 shows why: with the low 0.1 threshold the centerline runs into FDK streak
 artifacts (estimates of 0.4 to 0.8 mm radius at s = 40 to 70 mm), and the
 dim proximal part is still not recovered in 131_0. Hysteresis is reverted
-(single threshold 0.2 as in run 2; kept only as an option). Run 4 = run 2
-extraction with the 4DRGS view subsets: TODO.
+(single threshold 0.2 as in run 2; kept only as an option).
+
+### Run 4 (final): FDK fallback, single threshold, 4DRGS view subsets, Oct 4, repo `c83190b`
+
+`results/step2.1_geom_init_v60_fdk_run4.json`, figures `..._fdk_run4.png`;
+initial geometries `geom_init.npz` per case (molab
+`~/flowsplat_work/step2_1/<case>_v60_fdk/`, copy on the M4 in
+`data/open_items2/step2_1/`).
+
+| Case | Radius MAE (mm) | Bias (mm) | GT coverage | Lesion coverage | Throat error (mm) | Length est / GT (mm) | Pass |
+|---|---|---|---|---|---|---|---|
+| 121_0 | 0.050 | -0.040 | 100 % | 100 % | -0.04 | 156.0 / 150.0 | yes |
+| 122_0 | 0.117 | -0.054 | 88 % | 100 % | -0.48 | 169.5 / 162.5 | yes |
+| 130_0 | 0.103 | -0.057 | 97 % | 100 % | -0.17 | 174.5 / 163.5 | yes |
+| 131_0 | 0.045 | -0.040 | 67 % | 0 % | (lesion missing) | 73.5 / 104.0 | yes |
+| 135_0 | 0.066 | -0.044 | 100 % | 100 % | +0.03 | 121.0 / 117.5 | yes |
+
+Mean radius MAE 0.076 mm; all 5 cases below 0.2 mm. Run 4 reproduces run 2
+(the view-subset change has no material effect).
 
 ## DoD
 
 | DoD part | Met |
 |---|---|
-| Lumen radius error < 0.2 mm on 5 validation cases | Run 2 (FDK fallback): yes, MAE 0.05 to 0.11 mm; coverage gap in 131_0; run 3 (hysteresis) failed; run 4 pending |
+| Lumen radius error < 0.2 mm on 5 validation cases | **Yes** (run 4: 0.045 to 0.117 mm, mean 0.076 mm) |
 
-**DoD met: as written yes (run 2); final confirmation with run 4. Fallback used: yes (FDK volume skeleton). Known limitation: 131_0 misses its proximal third with the stenosis.**
+**DoD met: yes. Fallback used: yes**: plan, Step 2.1: "If Gaussians do not
+align with the vessel: initialize directly from the ground-truth-free FDK
+volume skeleton." The plan route (static R2-Gaussian, run 1) gave 0.20 to
+0.42 mm.
 
-Plan fallback (if Gaussians do not align with the vessel): "initialize
-directly from the ground-truth-free FDK volume skeleton."
+## Known limitation and open items
+
+- **131_0:** the dim proximal third of the vessel (filled early, washed out
+  before most views) is lost in the FDK volume, so the initial centerline
+  starts after the stenosis (coverage 67 %, lesion 0 %). Step 2.2 starts
+  from an incomplete vessel there; this is reported, not fixed (the
+  hysteresis attempt failed, run 3).
+- The radius MAE scores only points that were found; coverage and lesion
+  coverage are now reported next to it.
+- Throat radius at initialisation is off by up to 0.48 mm (122_0); Step 2.2
+  refines geometry against the projections (its DoD: stenosis diameter
+  error < 0.2 mm).
+- Estimated centerlines are 3.5 to 11 mm longer than GT (end caps and FDK
+  tails), excluded by the 5 mm end trim.
