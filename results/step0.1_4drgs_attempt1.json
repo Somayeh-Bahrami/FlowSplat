@@ -1,0 +1,154 @@
+{
+  "step": "0.1",
+  "timestamp_utc": "2026-10-04T06:03:46Z",
+  "pins": {
+    "r2_gaussian": {
+      "url": "https://github.com/Ruyi-Zha/r2_gaussian",
+      "commit": "f2579bfddd9aac009cb797c8503bef8119bbd022"
+    },
+    "tigre": {
+      "url": "https://github.com/CERN/TIGRE",
+      "commit": "6b0951a8a88aa88a7db5b2a95181a33a95aa8b28"
+    },
+    "4drgs": {
+      "url": "https://github.com/ShanghaiTech-IMPACT/4DRGS",
+      "commit": "38006edbb105b363ae2ed6b075e1766ec70a91dc"
+    },
+    "tiny_cuda_nn": {
+      "url": "https://github.com/NVlabs/tiny-cuda-nn",
+      "commit": "3daa6e5b8b8e0fa17971a1a20acfbb3754494b38"
+    }
+  },
+  "env": {
+    "flowsplat_commit": "b6c19ece65d02bc3f3ffc9920eb0c9b2e0eeaa11",
+    "python": "3.13.11",
+    "torch": "2.11.0+cu130",
+    "torch_cuda": "13.0",
+    "cudnn": 91900,
+    "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compute_capability": "12.0",
+    "torch_arch_list": [
+      "sm_75",
+      "sm_80",
+      "sm_86",
+      "sm_90",
+      "sm_100",
+      "sm_120"
+    ],
+    "torch_supports_gpu_arch": true,
+    "gpu_memory_gb": 95.0,
+    "driver": "595.71.05",
+    "cuda_option": "A",
+    "option_a_first_error": null,
+    "torch_file": "/usr/local/lib/python3.13/site-packages/torch/__init__.py",
+    "sys_path": [
+      "/marimo/flowsplat/src",
+      "/usr/local/_marimo/sitedir",
+      "/tmp/uv-venv/lib/python3.13/site-packages",
+      "/marimo/flowsplat",
+      "/usr/local/lib/python313.zip",
+      "/usr/local/lib/python3.13",
+      "/usr/local/lib/python3.13/lib-dynload",
+      "/home/marimo/flowsplat_work/external/r2_gaussian/r2_gaussian/submodules/simple-knn",
+      "/usr/local/lib/python3.13/site-packages",
+      "/usr/local/lib/python3.13/site-packages/nvidia_cutlass_dsl/python_packages",
+      "/marimo"
+    ],
+    "nvcc_path": "/home/marimo/flowsplat_work/cuda-13.0/bin/nvcc",
+    "nvcc_rejected": [
+      "/tmp/uv-venv/lib/python3.13/site-packages/nvidia/cu13/bin/nvcc (13.0)",
+      "/usr/local/lib/python3.13/site-packages/nvidia/cu13/bin/nvcc (13.3)"
+    ],
+    "cuda_toolkit_source": "pip (cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]==13.0.*)",
+    "ninja": "1.13.2.git.kitware.jobserver-pipe-1",
+    "nvcc_version": [
+      "Cuda compilation tools, release 13.0, V13.0.88",
+      "Build cuda_13.0.r13.0/compiler.36424714_0"
+    ],
+    "gcc": [
+      "gcc (Debian 14.2.0-19) 14.2.0"
+    ],
+    "cccl_include": "/home/marimo/flowsplat_work/cuda-13.0/include/cccl"
+  },
+  "build": {
+    "cuda_option": "A",
+    "simple_knn": "editable_compat+plain",
+    "xray_rasterizer_voxelizer": "editable+nvcc_append_flags",
+    "tigre": "plain",
+    "pip_failed": [],
+    "build_minutes": 3.4
+  },
+  "r2_gaussian": {
+    "skipped": "FLOWSPLAT_ONLY_4DRGS=1; see results/step0.1.json"
+  },
+  "tigre": {
+    "version": "3.1.3",
+    "proj_shape": [
+      4,
+      64,
+      64
+    ],
+    "finite": true,
+    "center_value": 256.002,
+    "expected_center_value": 256.0,
+    "rel_error": 1e-05,
+    "forward_ms": 139.4,
+    "pass": true
+  },
+  "4drgs": {
+    "ran": false,
+    "error": "RuntimeError: Command failed (1): /tmp/uv-venv/bin/python train.py -m=/home/marimo/flowsplat_work/output_4drgs/case2_30v_10k -s=/home/marimo/flowsplat_work/data_4drgs/case2 ..."
+  },
+  "deviations": [
+    {
+      "what": "CUDA compiler installed from pip: cuda-toolkit[nvcc,nvvm,crt,cccl,cudart]==13.0.*; CUDA_HOME = /home/marimo/flowsplat_work/cuda-13.0 (symlink tree: venv nvcc prefix first, then the system prefix with cudart)",
+      "instead_of": "a system CUDA toolkit, as the READMEs assume",
+      "reason": "The molab image has no matching nvcc. Pinned to the CUDA version of the installed torch (13.0); rejected: ['/tmp/uv-venv/lib/python3.13/site-packages/nvidia/cu13/bin/nvcc (13.0)', '/usr/local/lib/python3.13/site-packages/nvidia/cu13/bin/nvcc (13.3)']. Symlinks added for the linker: 0. No source change."
+    },
+    {
+      "what": "CCCL include dir added as a build flag: CPATH and NVCC_APPEND_FLAGS='-I/home/marimo/flowsplat_work/cuda-13.0/include/cccl'",
+      "instead_of": "plain build (cub/cub.cuh found under CUDA_HOME/include, CUDA 12 layout)",
+      "reason": "CUDA 13 moved cub/thrust to include/cccl; simple-knn failed with 'cub/cub.cuh: No such file or directory'. Build flag only; source untouched."
+    },
+    {
+      "what": "Environment: python 3.13.11, torch 2.11.0+cu130 (CUDA 13.0)",
+      "instead_of": "R2-Gaussian README: python 3.9, torch 2.1.2+cu118 (or 1.12.1 + cudatoolkit 11.6); requirements.txt version pins",
+      "reason": "GPU compute capability 12.0 is not supported by those old builds. requirements.txt is not installed with its pins; the same packages are installed unpinned. No source change."
+    },
+    {
+      "what": "TIGRE at commit 6b0951a (master, v3.1.3 line)",
+      "instead_of": "R2-Gaussian README: TIGRE v2.3 release zip",
+      "reason": "Project rule: pin the official repo to a commit. v3.1.x lists GPU architectures from nvcc at build time, which is needed for a Blackwell GPU. No source change."
+    },
+    {
+      "what": "All CUDA extensions (simple-knn, xray rasterizer/voxelizer, TIGRE, tiny-cuda-nn, 4DRGS submodules) installed with `pip install --no-build-isolation`",
+      "instead_of": "plain `pip install` from the READMEs",
+      "reason": "Isolated build env has no torch: ModuleNotFoundError at the simple-knn build (molab, Oct 2). Builds against the installed torch. Build flag only; source untouched."
+    },
+    {
+      "what": "simple-knn: installed as 'editable_compat' (/home/marimo/flowsplat_work/external/r2_gaussian/r2_gaussian/submodules/simple-knn --config-settings editable_mode=compat)",
+      "instead_of": "`pip install -e` from the R2-Gaussian README",
+      "reason": "The -e build compiled but `import simple_knn._C` failed (module not on the import path). Install mode only; source untouched."
+    },
+    {
+      "what": "xray-gaussian-rasterization-voxelization: built with NVCC_APPEND_FLAGS='-include cfloat -include cstdint'",
+      "instead_of": "plain `pip install -e` from the README",
+      "reason": "Plain build failed with this compiler. Flag only; source untouched."
+    },
+    {
+      "what": "4DRGS diff-Xray-gaussian-rasterization-voxelization-sortfree: built with NVCC_APPEND_FLAGS='-include cfloat -include cstdint'",
+      "instead_of": "plain pip install from the 4DRGS README",
+      "reason": "Plain build failed with GCC 14 (missing <cstdint>). Flag only; source untouched."
+    },
+    {
+      "what": "4DRGS diff-Xray-gaussian-rasterization-voxelization-legacy: built with NVCC_APPEND_FLAGS='-include cfloat -include cstdint'",
+      "instead_of": "plain pip install from the 4DRGS README",
+      "reason": "Plain build failed with GCC 14 (missing <cstdint>). Flag only; source untouched."
+    }
+  ],
+  "source_untouched": {
+    "r2_gaussian": true,
+    "tigre": true,
+    "4drgs": true
+  }
+}

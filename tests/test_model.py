@@ -125,9 +125,10 @@ def test_write_r2g_case_roundtrip(tmp_path):
     assert np.allclose(v, expected, atol=0.005)
 
 
-def test_dim_segment_stays_connected():
-    """A proximal segment at 15 % brightness (between the low 0.1 and high
-    0.2 thresholds) must stay in the centerline (case 131_0 failure mode)."""
+def test_dim_segment_hysteresis_option():
+    """Hysteresis (low_frac 0.1) keeps a proximal segment at 15 % brightness;
+    the default single threshold (0.2) loses it. The default stays single
+    because hysteresis followed FDK streaks on real data (run 3, Oct 4)."""
     s = np.arange(0, 60.0001, 0.5)
     xyz = np.stack([s, 8 * np.sin(s / 15.0), 0.2 * s], axis=1)
     r = dg.insert_stenosis(s, np.linspace(1.8, 1.2, len(s)), 0.5, 8.0, 15.0)
@@ -136,7 +137,7 @@ def test_dim_segment_stays_connected():
     b = np.where(lum["s_vox"] < 25.0, 0.15, 1.0)  # dim proximal 25 mm, stenosis inside
     vol[tuple(lum["idx"].T)] = lum["frac"] * b
     vol = gaussian_filter(vol, 0.3 / lum["vox_mm"])
-    s_e, xyz_e = md.centerline_from_volume(vol, lum["vox_mm"], lum["origin_mm"])
+    s_e, xyz_e = md.centerline_from_volume(vol, lum["vox_mm"], lum["origin_mm"], low_frac=0.1)
     assert s_e[-1] > 54.0  # whole vessel (minus end caps), not only the bright 35 mm
-    s_e1, _ = md.centerline_from_volume(vol, lum["vox_mm"], lum["origin_mm"], low_frac=0.2)
-    assert s_e1[-1] < 40.0  # the old single threshold loses the dim part
+    s_e1, _ = md.centerline_from_volume(vol, lum["vox_mm"], lum["origin_mm"])
+    assert s_e1[-1] < 40.0  # default single threshold loses the dim part

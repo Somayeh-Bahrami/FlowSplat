@@ -68,6 +68,10 @@ def _(Path, os):
     DRGS_COMMIT = "38006edbb105b363ae2ed6b075e1766ec70a91dc"  # 2026-08-24
     TCNN_URL = "https://github.com/NVlabs/tiny-cuda-nn"  # dependency of 4DRGS
     TCNN_COMMIT = "3daa6e5b8b8e0fa17971a1a20acfbb3754494b38"
+    # LEAP CT toolbox: 4DRGS imports it unconditionally (ct/leap_ct.py), README
+    # "Setup" installs it from source. Default branch head, 2024-12-14.
+    LEAP_URL = "https://github.com/LLNL/LEAP"
+    LEAP_COMMIT = "0c8846f42b2e59340d5559fc1271d590a292f9a0"
 
     # R2-Gaussian example data: README Sec 2 "Dataset" link, synthetic_dataset,
     # file cone_ntrain_50_angle_360.zip. Example case from README Sec 3.2.
@@ -114,6 +118,8 @@ def _(Path, os):
         R2G_DATA_ID,
         R2G_EXPECTED,
         R2G_URL,
+        LEAP_COMMIT,
+        LEAP_URL,
         TCNN_COMMIT,
         TCNN_URL,
         TIGRE_COMMIT,
@@ -527,6 +533,8 @@ def _(
     DRGS_URL,
     R2G_COMMIT,
     R2G_URL,
+    LEAP_COMMIT,
+    LEAP_URL,
     TCNN_COMMIT,
     TCNN_URL,
     TIGRE_COMMIT,
@@ -544,6 +552,7 @@ def _(
     TIGRE_DIR = EXT / "TIGRE"
     DRGS_DIR = EXT / "4DRGS"
     TCNN_DIR = EXT / "tiny-cuda-nn"
+    LEAP_DIR = EXT / "LEAP"
     pins = {
         "r2_gaussian": {"url": R2G_URL, "commit": clone_pinned(R2G_URL, R2G_COMMIT, R2G_DIR)},
         "tigre": {"url": TIGRE_URL, "commit": clone_pinned(TIGRE_URL, TIGRE_COMMIT, TIGRE_DIR)},
@@ -551,6 +560,7 @@ def _(
     if run_4drgs.value:
         pins["4drgs"] = {"url": DRGS_URL, "commit": clone_pinned(DRGS_URL, DRGS_COMMIT, DRGS_DIR)}
         pins["tiny_cuda_nn"] = {"url": TCNN_URL, "commit": clone_pinned(TCNN_URL, TCNN_COMMIT, TCNN_DIR)}
+        pins["leap"] = {"url": LEAP_URL, "commit": clone_pinned(LEAP_URL, LEAP_COMMIT, LEAP_DIR)}
     deviations.append(
         {
             "what": f"TIGRE at commit {TIGRE_COMMIT[:7]} (master, v3.1.3 line)",
@@ -560,7 +570,7 @@ def _(
         }
     )
     print(pins)
-    return DRGS_DIR, R2G_DIR, TCNN_DIR, TIGRE_DIR, pins
+    return DRGS_DIR, LEAP_DIR, R2G_DIR, TCNN_DIR, TIGRE_DIR, pins
 
 
 @app.cell
@@ -868,10 +878,13 @@ def _(
     DRGS_DATA_URL,
     DRGS_DIR,
     DRGS_EXPECTED,
+    LEAP_DIR,
     PSNR_TOL_DB,
+    Path,
     TCNN_DIR,
     WORK,
     deviations,
+    os,
     pip_install,
     run_4drgs,
     setup_check,
@@ -909,6 +922,39 @@ def _(
                 "simple-knn",
             ]:
                 _install(DRGS_DIR / "submodules" / _sub, f"4DRGS {_sub}")
+
+            # LEAP, as in the 4DRGS README "Setup" (linux): sh ./etc/build.sh,
+            # cp ./build/lib/libleapct.so ., python manual_install.py. CMake is
+            # taken from pip; the build uses the same CUDA_HOME as all others.
+            import importlib.util as _ilu
+            import shutil as _sh
+            import subprocess as _sp
+            import sysconfig as _sc
+
+            def _leap_ok():
+                return _sp.run([sys.executable, "-c", "import leapctype"], cwd="/", capture_output=True).returncode == 0
+
+            if not _leap_ok():
+                if _ilu.find_spec("cmake") is None:
+                    pip_install(["cmake"])
+                _benv = {**_env, "CUDACXX": str(Path(_env["CUDA_HOME"]) / "bin" / "nvcc"),
+                         "CUDA_TOOLKIT_ROOT_DIR": _env["CUDA_HOME"],
+                         "PATH": _sc.get_paths()["scripts"] + os.pathsep + os.environ.get("PATH", "")}
+                sh(["bash", "./etc/build.sh"], cwd=LEAP_DIR, env=_benv)
+                _sh.copy(LEAP_DIR / "build" / "lib" / "libleapct.so", LEAP_DIR / "libleapct.so")
+                sh([sys.executable, "manual_install.py"], cwd=LEAP_DIR)
+                if not _leap_ok():
+                    # manual_install.py copies to the user site-packages, which a
+                    # venv does not read. Same files into the venv instead.
+                    _dst = Path(_sc.get_paths()["purelib"])
+                    for _f in ["libleapct.so", "src/leaptorch.py", "src/leapctype.py",
+                               "src/leap_filter_sequence.py", "src/leap_preprocessing_algorithms.py"]:
+                        _sh.copy(LEAP_DIR / _f, _dst)
+                    deviations.append({"what": f"LEAP files copied to {_dst}",
+                                       "instead_of": "manual_install.py target site.getusersitepackages()",
+                                       "reason": "The uv venv does not read the user site-packages. Same file list; no source change."})
+                if not _leap_ok():
+                    raise RuntimeError("leapctype still not importable after the LEAP build")
 
             _case = WORK / "data_4drgs" / "case2"
             if not (_case / "transforms.json").exists():

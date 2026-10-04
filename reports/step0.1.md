@@ -205,6 +205,11 @@ Not part of the DoD:
    as the R2-Gaussian rasterizer (Oct 4); run `FLOWSPLAT_ONLY_4DRGS=1 python
    notebooks/step0_setup.py` (skips the chest example, writes
    `results/step0.1_4drgs.json`). Needed by Step 4.1 (baseline 1, Oct 27).
+   Attempt 1 (Oct 4, `results/step0.1_4drgs_attempt1.json`): all 4DRGS
+   submodules built (with the cstdint flag), data downloaded, but train.py
+   stops at `import leapctype` (4DRGS imports the LEAP toolbox even with
+   --fdk_toolbox=tigre). LEAP is now cloned (pinned `0c8846f`) and built as
+   in the 4DRGS README; attempt 2 pending.
 
 ## Not verified
 

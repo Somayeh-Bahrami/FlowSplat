@@ -25,14 +25,14 @@ from scipy.sparse.csgraph import dijkstra
 from flowsplat import centerline as cl
 from flowsplat import data_gen as dg
 
-# OURS: hysteresis thresholds for the skeleton mask, as fractions of the
-# 99.9th percentile of the positive voxels: voxels above LOW_FRAC are kept
-# when connected to a voxel above THRESH_FRAC. A single threshold of 0.2 cut
-# off a dim proximal segment (with the stenosis) in case 131_0 of the FDK
-# run, Oct 4. Only used to find the centerline; the radius does not depend
-# on it.
+# OURS: foreground threshold for the skeleton mask, as a fraction of the
+# 99.9th percentile of the positive voxels. Hysteresis (grow down to 0.1)
+# was tried on Oct 4 (run 3) to recover the dim proximal segment of case
+# 131_0; it let the centerline run into FDK streaks (radius MAE 0.05 -> 0.32
+# mm on 121_0) and did not recover 131_0, so LOW_FRAC = THRESH_FRAC (single
+# threshold, as in run 2). Only used to find the centerline.
 THRESH_FRAC = 0.2
-LOW_FRAC = 0.1
+LOW_FRAC = 0.2
 # OURS: rays per cross-section and maximum search radius for the half maximum.
 N_RAYS = 16
 R_MAX_MM = 4.0

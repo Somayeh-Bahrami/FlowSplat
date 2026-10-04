@@ -2,7 +2,8 @@
 
 Dates: Oct 12 to Oct 14, 2026 (started Oct 3). Status: **in progress**:
 plan route failed the DoD (run 1); fallback (FDK skeleton) meets the DoD as
-written (run 2) but missed one lesion; extraction fix pending run 3.
+written (run 2) but missed one lesion; hysteresis fix failed (run 3) and is
+reverted; run 4 (run-2 extraction with the 4DRGS view subsets) pending.
 
 Plan DoD: "Lumen radius error below 0.2 mm on 5 validation cases."
 
@@ -103,19 +104,38 @@ volume's dim proximal third (with the stenosis) was cut off by the single
 0.2 x p99.9 threshold, so the centerline starts after the lesion. That
 would give Step 2.2 a wrong inlet.
 
-Fix (part of the fallback's skeleton extraction, threshold choice OURS):
-hysteresis thresholding (seed 0.2, grow to 0.1 x p99.9). Synthetic test: a
-proximal segment at 15 % brightness is kept (old threshold: lost). The
-notebook now also reports GT coverage, lesion coverage and throat radius
-error. Run 3 (same FDK volumes, new extraction): TODO.
+Attempted fix (part of the fallback's skeleton extraction, threshold
+choice OURS): hysteresis thresholding (seed 0.2, grow to 0.1 x p99.9).
+Synthetic test: a proximal segment at 15 % brightness is kept. Failed on
+real data (run 3, below). The notebook now also reports GT coverage, lesion
+coverage and throat radius error.
+
+### Run 3: FDK + hysteresis + 4DRGS view subsets, Oct 4, repo `b6c19ec`
+
+`results/step2.1_geom_init_v60_fdk_run3.json`, figures `..._fdk_run3.png`.
+
+| Case | Radius MAE (mm) | GT coverage | Lesion coverage | Throat error (mm) |
+|---|---|---|---|---|
+| 121_0 | 0.320 | 73 % | 100 % | -0.06 |
+| 122_0 | 0.147 | 77 % | 82 % | -0.38 |
+| 130_0 | 0.184 | 92 % | 100 % | -0.19 |
+| 131_0 | 0.229 | 67 % | 0 % | +1.07 (lesion missing) |
+| 135_0 | 0.172 | 87 % | 85 % | +0.08 |
+
+Worse than run 2 (mean MAE 0.21 mm, 3 of 5 above 0.2 mm). The 121_0 figure
+shows why: with the low 0.1 threshold the centerline runs into FDK streak
+artifacts (estimates of 0.4 to 0.8 mm radius at s = 40 to 70 mm), and the
+dim proximal part is still not recovered in 131_0. Hysteresis is reverted
+(single threshold 0.2 as in run 2; kept only as an option). Run 4 = run 2
+extraction with the 4DRGS view subsets: TODO.
 
 ## DoD
 
 | DoD part | Met |
 |---|---|
-| Lumen radius error < 0.2 mm on 5 validation cases | Run 2 (FDK fallback): yes, MAE 0.05 to 0.11 mm; coverage gap in 131_0, run 3 pending |
+| Lumen radius error < 0.2 mm on 5 validation cases | Run 2 (FDK fallback): yes, MAE 0.05 to 0.11 mm; coverage gap in 131_0; run 3 (hysteresis) failed; run 4 pending |
 
-**DoD met: as written yes (run 2); closing after run 3 confirms full coverage. Fallback used: yes (FDK volume skeleton).**
+**DoD met: as written yes (run 2); final confirmation with run 4. Fallback used: yes (FDK volume skeleton). Known limitation: 131_0 misses its proximal third with the stenosis.**
 
 Plan fallback (if Gaussians do not align with the vessel): "initialize
 directly from the ground-truth-free FDK volume skeleton."
