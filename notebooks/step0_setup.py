@@ -973,10 +973,47 @@ def _(
                 sh([sys.executable, "-m", "gdown", "--folder", DRGS_DATA_URL, "-O", _case])
             _out = WORK / "output_4drgs" / "case2_30v_10k"
             _common = [f"-m={_out}", f"-s={_case}", "--Nviews=30", "--iteration=10000", "--fdk_toolbox=tigre"]
+
+            # pymeshlab (4DRGS mesh / ICP evaluation at the end of train.py)
+            # needs the system library libOpenGL.so.0, which the molab image
+            # lacks (attempt 5, Oct 4: "Unknown format for load: obj"). Without
+            # root: download the Debian package, unpack it locally and put it
+            # on LD_LIBRARY_PATH for the 4DRGS commands. Failure is tolerated.
+            import ctypes.util as _cu
+            import glob as _glob
+
+            _run_env = {}
+            if _cu.find_library("OpenGL") is None:
+                _sys_dir = WORK / "syslibs"
+                _sys_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    if not _glob.glob(str(_sys_dir / "libopengl0*.deb")):
+                        sh(["apt-get", "download", "libopengl0"], cwd=_sys_dir)
+                    for _deb in _glob.glob(str(_sys_dir / "libopengl0*.deb")):
+                        sh(["dpkg-deb", "-x", _deb, str(_sys_dir / "root")])
+                    _libdirs = sorted({str(Path(_f).parent) for _f in _glob.glob(str(_sys_dir / "root" / "**" / "libOpenGL.so*"), recursive=True)})
+                    if _libdirs:
+                        _run_env["LD_LIBRARY_PATH"] = os.pathsep.join(_libdirs + [os.environ.get("LD_LIBRARY_PATH", "")]).rstrip(os.pathsep)
+                        deviations.append({"what": f"libOpenGL.so.0 from the Debian package libopengl0, unpacked to {_sys_dir} (LD_LIBRARY_PATH)",
+                                           "instead_of": "a system libOpenGL (needed by pymeshlab plugins)",
+                                           "reason": "Missing in the molab image; no root. Runtime library only; source untouched."})
+                except RuntimeError as _e:
+                    print("libOpenGL could not be provided:", _e)
+
             _t0 = time.time()
-            sh([sys.executable, "train.py", *_common, "--ADC_until_iter=5000"], cwd=DRGS_DIR)
+            try:
+                # --save_iterations 10000: so test.py can load the model even if the
+                # final mesh evaluation inside train.py fails (CLI flag only).
+                sh([sys.executable, "train.py", *_common, "--ADC_until_iter=5000", "--save_iterations", "10000"],
+                   cwd=DRGS_DIR, env=_run_env)
+            except RuntimeError:
+                if not (_out / "point_cloud" / "iteration_10000").exists():
+                    raise
+                deviations.append({"what": "4DRGS train.py ended with an error in its final mesh / ICP evaluation; model saved at 10k was evaluated with test.py --render_2d",
+                                   "instead_of": "the 3D mesh evaluation at the end of train.py",
+                                   "reason": "pymeshlab could not load .obj meshes on molab (missing OpenGL plugins). 2D metrics (the README comparison) unaffected."})
             _minutes = round((time.time() - _t0) / 60, 1)
-            _log = sh([sys.executable, "test.py", *_common, "--render_2d"], cwd=DRGS_DIR)
+            _log = sh([sys.executable, "test.py", *_common, "--render_2d"], cwd=DRGS_DIR, env=_run_env)
             _m = setup_check.parse_4drgs_log(_log)
             _cmp = setup_check.compare_psnr(_m.get("psnr_eval"), DRGS_EXPECTED["psnr_eval"], PSNR_TOL_DB)
             drgs_result = {

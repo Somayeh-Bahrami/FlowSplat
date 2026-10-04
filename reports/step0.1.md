@@ -216,8 +216,15 @@ Not part of the DoD:
    image). Fix: CMAKE_GENERATOR=Ninja plus explicit CC / CXX / CUDAHOSTCXX
    (environment only). Attempt 4 (`903b45c`): LEAP compiled and linked
    (deprecation warnings only); `manual_install.py` stopped because the user
-   site-packages folder does not exist. Fix: create it before the script;
-   attempt 5 pending.
+   site-packages folder does not exist. Fix: create it before the script.
+   Attempt 5 (`78a7b02`): LEAP built and installed; **4DRGS trained all
+   10,000 iterations (1 min 51 s)**, then `train.py` crashed in its final
+   mesh / ICP evaluation: pymeshlab cannot load `.obj` because its plugins
+   need `libOpenGL.so.0`, missing in the image. Fix (no source edit): the
+   Debian package libopengl0 is downloaded and unpacked without root and put
+   on LD_LIBRARY_PATH; `--save_iterations 10000` (CLI) so that, if the mesh
+   step still fails, `test.py --render_2d` (the README comparison) can load
+   the trained model. Attempt 6 pending.
 
 ## Not verified
 
