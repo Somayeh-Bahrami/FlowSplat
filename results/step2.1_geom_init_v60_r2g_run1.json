@@ -1,0 +1,198 @@
+{
+  "timestamp_utc": "2026-10-04T01:52:54Z",
+  "views": 60,
+  "dod_mm": 0.2,
+  "mae_mm_per_case": {
+    "121_0": 0.2297,
+    "122_0": 0.1985,
+    "130_0": 0.2106,
+    "131_0": 0.4248,
+    "135_0": 0.324
+  },
+  "mae_mm_mean": 0.27751380860630714,
+  "all_pass": false,
+  "rows": [
+    {
+      "case": "121_0",
+      "views": 60,
+      "mae_mm": 0.22970216394974075,
+      "p90_mm": 0.6237565094184898,
+      "bias_mm": -0.1634580702688229,
+      "centerline_dist_mm": 0.7284544532176173,
+      "coverage": 0.8984126984126984,
+      "n": 283,
+      "alignment_loss_init": -3.330291420411413e-08,
+      "n_gaussians": 315,
+      "length_est_mm": 157.0,
+      "length_gt_mm": 150.0,
+      "stenosis_degree_gt": 0.44482901253078855,
+      "r_min_gt_mm": 0.8109820843985788,
+      "r2g_eval": {
+        "eval2d_render_test": {
+          "psnr_2d": 33.636138916015625,
+          "ssim_2d": 0.7975451350212097
+        },
+        "eval2d_render_train": {
+          "psnr_2d": 32.022037506103516,
+          "ssim_2d": 0.6906962990760803
+        },
+        "eval3d": {
+          "psnr_3d": 34.90087127685547,
+          "ssim_3d": 0.9587849577267965,
+          "ssim_3d_x": 0.9563564658164978,
+          "ssim_3d_y": 0.96067875623703,
+          "ssim_3d_z": 0.9593196511268616
+        }
+      },
+      "train_minutes": 13.3,
+      "deviations": [],
+      "pass": false
+    },
+    {
+      "case": "122_0",
+      "views": 60,
+      "mae_mm": 0.19853292548616266,
+      "p90_mm": 0.4115789672313048,
+      "bias_mm": -0.11010657212250709,
+      "centerline_dist_mm": 0.9849732772358238,
+      "coverage": 0.886039886039886,
+      "n": 311,
+      "alignment_loss_init": -1.7321008627391166e-08,
+      "n_gaussians": 351,
+      "length_est_mm": 175.0,
+      "length_gt_mm": 162.5,
+      "stenosis_degree_gt": 0.3588168106628805,
+      "r_min_gt_mm": 0.8888714713761372,
+      "r2g_eval": {
+        "eval2d_render_test": {
+          "psnr_2d": 31.009662628173828,
+          "ssim_2d": 0.7388654947280884
+        },
+        "eval2d_render_train": {
+          "psnr_2d": 30.052900314331055,
+          "ssim_2d": 0.6383930444717407
+        },
+        "eval3d": {
+          "psnr_3d": 36.49920654296875,
+          "ssim_3d": 0.964435080687205,
+          "ssim_3d_x": 0.9640573859214783,
+          "ssim_3d_y": 0.9655689001083374,
+          "ssim_3d_z": 0.9636789560317993
+        }
+      },
+      "train_minutes": 14.3,
+      "deviations": [],
+      "pass": true
+    },
+    {
+      "case": "130_0",
+      "views": 60,
+      "mae_mm": 0.21058773004843684,
+      "p90_mm": 0.47525304554233994,
+      "bias_mm": -0.051192974716547116,
+      "centerline_dist_mm": 1.4349428866187393,
+      "coverage": 0.9195402298850575,
+      "n": 320,
+      "alignment_loss_init": -4.179176116281269e-08,
+      "n_gaussians": 348,
+      "length_est_mm": 173.5,
+      "length_gt_mm": 163.5,
+      "stenosis_degree_gt": 0.6130509937552779,
+      "r_min_gt_mm": 0.787658065487611,
+      "r2g_eval": {
+        "eval2d_render_test": {
+          "psnr_2d": 29.96842384338379,
+          "ssim_2d": 0.6329485774040222
+        },
+        "eval2d_render_train": {
+          "psnr_2d": 28.809309005737305,
+          "ssim_2d": 0.5533060431480408
+        },
+        "eval3d": {
+          "psnr_3d": 34.585262298583984,
+          "ssim_3d": 0.9546805222829183,
+          "ssim_3d_x": 0.9535593390464783,
+          "ssim_3d_y": 0.9566249847412109,
+          "ssim_3d_z": 0.9538572430610657
+        }
+      },
+      "train_minutes": 15.1,
+      "deviations": [],
+      "pass": false
+    },
+    {
+      "case": "131_0",
+      "views": 60,
+      "mae_mm": 0.4247625952348808,
+      "p90_mm": 0.8250968247684151,
+      "bias_mm": -0.3097714417422888,
+      "centerline_dist_mm": 1.932182993657859,
+      "coverage": 0.8412017167381974,
+      "n": 196,
+      "alignment_loss_init": -1.534883509179963e-08,
+      "n_gaussians": 233,
+      "length_est_mm": 116.0,
+      "length_gt_mm": 104.0,
+      "stenosis_degree_gt": 0.599400889564963,
+      "r_min_gt_mm": 0.8486872772935135,
+      "r2g_eval": {
+        "eval2d_render_test": {
+          "psnr_2d": 29.956878662109375,
+          "ssim_2d": 0.6926138401031494
+        },
+        "eval2d_render_train": {
+          "psnr_2d": 29.575023651123047,
+          "ssim_2d": 0.6401703357696533
+        },
+        "eval3d": {
+          "psnr_3d": 30.74068260192871,
+          "ssim_3d": 0.9155025879542033,
+          "ssim_3d_x": 0.9115185737609863,
+          "ssim_3d_y": 0.9204962849617004,
+          "ssim_3d_z": 0.9144929051399231
+        }
+      },
+      "train_minutes": 25.9,
+      "deviations": [],
+      "pass": false
+    },
+    {
+      "case": "135_0",
+      "views": 60,
+      "mae_mm": 0.32398362831231464,
+      "p90_mm": 0.73950656534944,
+      "bias_mm": -0.30714428205404276,
+      "centerline_dist_mm": 0.7720566227838941,
+      "coverage": 0.8658536585365854,
+      "n": 213,
+      "alignment_loss_init": -3.246757174224513e-08,
+      "n_gaussians": 246,
+      "length_est_mm": 122.5,
+      "length_gt_mm": 117.5,
+      "stenosis_degree_gt": 0.6098592043377411,
+      "r_min_gt_mm": 0.6263466522313185,
+      "r2g_eval": {
+        "eval2d_render_test": {
+          "psnr_2d": 28.413965225219727,
+          "ssim_2d": 0.6565321087837219
+        },
+        "eval2d_render_train": {
+          "psnr_2d": 29.108400344848633,
+          "ssim_2d": 0.7146273255348206
+        },
+        "eval3d": {
+          "psnr_3d": 32.300418853759766,
+          "ssim_3d": 0.9239379167556763,
+          "ssim_3d_x": 0.9185371398925781,
+          "ssim_3d_y": 0.9277897477149963,
+          "ssim_3d_z": 0.9254868626594543
+        }
+      },
+      "train_minutes": 13.8,
+      "deviations": [
+        "initialize_pcd.py --n_points 37139 (74279 GT voxels > 0.05)"
+      ],
+      "pass": false
+    }
+  ]
+}

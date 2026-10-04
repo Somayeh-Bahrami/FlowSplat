@@ -69,7 +69,8 @@ cannot explain views taken at different times; fitting them pulls the
 volume away from the vessel (centerline 0.7 to 1.9 mm off the axis vs.
 0.15 mm on the synthetic tube; radius biased low). A frame error would
 show a poor PSNR from iteration 1, which is not the case. Figures and the
-output zip of run 1 did not reach the M4 (only the printed summary).
+output zip of run 1 were recovered on Oct 4: `results/step2.1_geom_init_v60_r2g_run1.json`,
+`results/step2.1_<case>_v60_r2g_run1.png`.
 
 ### Fallback applied (rule 2)
 
