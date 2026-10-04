@@ -229,3 +229,35 @@ def test_merge_venv_and_system_cu13(tmp_path):
     sc.prepare_pip_cuda_home(home)
     assert (home / "lib64" / "libcudart.so").exists()
     assert sc.find_include_dir([home]) == home / "include" / "cccl"
+
+
+@pytest.mark.parametrize("nb", sorted(p.name for p in (ROOT / "notebooks").glob("*.py")))
+def test_notebook_no_global_defined_twice(nb):
+    """marimo refuses a notebook in which two cells assign the same global
+    (non-underscore) name. Nested function bodies are local and skipped."""
+    tree = ast.parse((ROOT / "notebooks" / nb).read_text())
+    cells = [
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and any("app.cell" in ast.unparse(d) for d in n.decorator_list)
+    ]
+    seen = {}
+    for c in cells:
+        names = set()
+        stack = list(c.body)
+        while stack:
+            node = stack.pop()
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+                continue  # do not descend into local scopes
+            if isinstance(node, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+                continue  # comprehension / lambda variables are local
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                names.add(node.id)
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                names |= {(a.asname or a.name).split(".")[0] for a in node.names}
+            stack.extend(ast.iter_child_nodes(node))
+        for n in names:
+            if n.startswith("_"):
+                continue
+            assert n not in seen, f"{nb}: '{n}' defined in cells at lines {seen[n]} and {c.lineno}"
+            seen[n] = c.lineno
