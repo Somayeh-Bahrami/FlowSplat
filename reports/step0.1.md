@@ -12,7 +12,7 @@ Decided by the project owner on Oct 1:
 | Plan bullet | This pass |
 |---|---|
 | Run R2-Gaussian on a CUDA GPU, reproduce one static reconstruction | Done: `0_chest_cone`, PSNR 3D within 0.06 dB of published |
-| Check whether 4DRGS code is public; if yes, run it on one case | Public: yes. Run: not done yet (submodule build failed on missing <cstdint>; retry with the build flag added Oct 4, run with FLOWSPLAT_ONLY_4DRGS=1 pending) |
+| Check whether 4DRGS code is public; if yes, run it on one case | Public: yes. **Done** (attempt 6, Oct 4): case2, 30 views, eval PSNR 36.26 vs 36.35 dB (README), SSIM 0.9021 (= README) |
 | Confirm TIGRE on the same GPU environment | Done: forward projection check passes |
 | OpenReview profile | Done (owner, Oct 3) |
 | Data-request emails to 4DRGS and PUNCH authors | Done (owner, Oct 3) |
@@ -84,7 +84,7 @@ Values from the molab run of Oct 3, 2026 (repo at `11a482a`). CUDA option used: 
 | Oct 2 | Option B: `Option B expected torch with CUDA 12.8, got 13.0`. torch 2.11.0+cu130 is in the system site-packages (`/usr/local/lib/python3.13`), outside the uv venv (`/tmp/uv-venv`); pip could not uninstall it and reported cu128 torch as already satisfied | torch + torchvision cu128 installed INTO the venv with `--ignore-installed` (deps too), venv site-packages put first on `sys.path` and `PYTHONPATH`, then the process restarts. Checks: `torch.version.cuda == 12.8`, `sm_120` in the arch list; `sys.path` and `torch.__file__` printed and saved. CUDA 12.8 toolkit merged from venv wheels only | Shadowing: Yes (torch 2.11.0+cu128 loaded from `/tmp/uv-venv/...`, sm_120 in arch list). Build: No, see next row |
 | Oct 3 | (a) Option A root cause: nvcc 13.0 was installed into the venv's `nvidia/cu13`, but `nvidia-cuda-runtime` 13.0.96 was already satisfied in the system `nvidia/cu13`, so `cuda_runtime.h` was not under `CUDA_HOME`. A tooling problem, not a CUDA 13 API error. (b) Option B: `nvcc not found`. File list of `nvidia-cuda-nvcc-cu12` 12.8.93 checked: only `ptxas`, crt headers, libnvvm; no nvcc binary on PyPI for CUDA 12.8 | (a) `CUDA_HOME` is now one symlink tree `WORK/cuda-13.0`: venv `nvidia/cu13` first (nvcc 13.0, crt, nvvm, cccl), then system `nvidia/cu13` (cudart headers and libs). (b) Option B now stops with this reason and the plan fallback | Yes (Oct 3 rerun: Option A builds pass) |
 | Oct 3 | Builds pass under Option A, but R2-Gaussian `train.py` fails: `ModuleNotFoundError: No module named 'simple_knn'` after `pip install -e` (README Sec 1). Likely cause: simple-knn's setup.py builds `simple_knn._C` without listing a package, so the setuptools editable finder does not map it (UNVERIFIED) | After each build, `import torch, <module>` is checked in a fresh interpreter. If it fails: reinstall with `-e --config-settings editable_mode=compat`, then a regular install; the mode used is logged as a deviation. Import failures no longer trigger the Option A to B switch | Yes (Oct 3: simple-knn installed as `editable_compat`, R2-Gaussian trained) |
-| Oct 3 | 4DRGS: `diff-Xray-gaussian-rasterization-voxelization-sortfree` fails: `rasterizer_impl.h(24): error: namespace "std" has no member "uintptr_t"` (same missing `<cstdint>` as the R2-Gaussian rasterizer) | Not fixed. The 4DRGS cell has no `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"` retry; the R2-Gaussian cell does and it worked there | No (open) |
+| Oct 3 | 4DRGS: `diff-Xray-gaussian-rasterization-voxelization-sortfree` fails: `rasterizer_impl.h(24): error: namespace "std" has no member "uintptr_t"` (same missing `<cstdint>` as the R2-Gaussian rasterizer) | 4DRGS cell retries with `NVCC_APPEND_FLAGS="-include cfloat -include cstdint"` (Oct 4); then LEAP built from source (Ninja, user site folder); see Still open | Yes (attempt 6, Oct 4) |
 
 ## R2-Gaussian reproduction (its own example case)
 
@@ -121,9 +121,20 @@ until 5k), 2D rendering metrics on held-out views.
 
 | Metric | Ours | Expected | Source of expected |
 |---|---|---|---|
-| Eval PSNR (dB) | not run | 36.349 | 4DRGS README, table under "Sort-free X-ray rasterization", case2, 30 views, "10k / 5k", Sort-free (authors' RTX 4060 Ti) |
-| Eval SSIM | not run | 0.9021 | same row |
-| Ran without error | No. tiny-cuda-nn built; `diff-Xray-gaussian-rasterization-voxelization-sortfree` failed to compile (`std::uintptr_t`, `uint32_t` undefined, missing `<cstdint>`) | | |
+| Eval PSNR (dB) | **36.259** (-0.09 dB) | 36.349 | 4DRGS README, table under "Sort-free X-ray rasterization", case2, 30 views, "10k / 5k", Sort-free (authors' RTX 4060 Ti) |
+| Eval SSIM | **0.9021** | 0.9021 | same row |
+| Train PSNR / SSIM | 38.10 dB / 0.924 | not published | |
+| Training time | 2.4 min (10k iterations, ADC until 5k), RTX PRO 6000 | not stated (authors' RTX 4060 Ti) | |
+| Pass (within 1 dB) | **yes** | | |
+| Mesh / ICP evaluation (Chamfer, Hausdorff) | not run: pymeshlab needs `libOpenGL.so.0`, not in the molab image, and `apt-get download libopengl0` found no package (no package lists, no root) | | 4DRGS Sec 4.1 metric; not needed for Step 0.1 |
+
+Run: attempt 6, Oct 4, repo `e867fdd`, `results/step0.1_4drgs.json`
+(raw: `Experiences/0.1_gpu_setup/6_4drgs_attempt6_2026-10-04/`). 4DRGS
+`train.py` ends with an error in its final mesh / ICP step, after training
+and saving the 10k model; `test.py --render_2d` then evaluates the held-out
+views (the README comparison). FDK initialisation used TIGRE
+(`--fdk_toolbox=tigre`); LEAP is installed only because 4DRGS imports it.
+Whether the README numbers used LEAP or TIGRE: UNVERIFIED.
 
 ## ImageCAS vessel (DoD item)
 
@@ -200,37 +211,17 @@ project."
 
 Not part of the DoD:
 
-1. **4DRGS on case2 (plan bullet).** Its rasterizer submodule failed on the
-   missing `<cstdint>`. The 4DRGS cell now retries with the same build flag
-   as the R2-Gaussian rasterizer (Oct 4); run `FLOWSPLAT_ONLY_4DRGS=1 python
-   notebooks/step0_setup.py` (skips the chest example, writes
-   `results/step0.1_4drgs.json`). Needed by Step 4.1 (baseline 1, Oct 27).
-   Attempt 1 (Oct 4, `results/step0.1_4drgs_attempt1.json`): all 4DRGS
-   submodules built (with the cstdint flag), data downloaded, but train.py
-   stops at `import leapctype` (4DRGS imports the LEAP toolbox even with
-   --fdk_toolbox=tigre). LEAP is now cloned (pinned `0c8846f`) and built as
-   in the 4DRGS README. Attempt 2 (Oct 4, repo `c83190b`,
-   `results/step0.1_4drgs_attempt2.json`): `bash ./etc/build.sh` of LEAP
-   failed. Log (attempt 3, Oct 4, `7abd757`): `CMake was unable to find a
-   build program corresponding to "Unix Makefiles"` (no `make` in the molab
-   image). Fix: CMAKE_GENERATOR=Ninja plus explicit CC / CXX / CUDAHOSTCXX
-   (environment only). Attempt 4 (`903b45c`): LEAP compiled and linked
-   (deprecation warnings only); `manual_install.py` stopped because the user
-   site-packages folder does not exist. Fix: create it before the script.
-   Attempt 5 (`78a7b02`): LEAP built and installed; **4DRGS trained all
-   10,000 iterations (1 min 51 s)**, then `train.py` crashed in its final
-   mesh / ICP evaluation: pymeshlab cannot load `.obj` because its plugins
-   need `libOpenGL.so.0`, missing in the image. Fix (no source edit): the
-   Debian package libopengl0 is downloaded and unpacked without root and put
-   on LD_LIBRARY_PATH; `--save_iterations 10000` (CLI) so that, if the mesh
-   step still fails, `test.py --render_2d` (the README comparison) can load
-   the trained model. Attempt 6 pending.
+1. **4DRGS mesh / ICP evaluation** (Chamfer / Hausdorff, 4DRGS Sec 4.1):
+   needs libOpenGL for pymeshlab, which molab lacks. Not needed for Step 0.1
+   (the 2D comparison passed); revisit only if Step 4.1 reports mesh metrics
+   for baseline 1. History of the 4DRGS run (attempts 1 to 6: cstdint flag,
+   LEAP import, no `make`, no user site folder, libOpenGL) is in
+   `NEGATIVE_RESULTS.md` and `Experiences/0.1_gpu_setup/`.
 
 ## Not verified
 
 - simple-knn setup.py contents (reason the plain `-e` install was not
   importable): UNVERIFIED, gitlab.inria.fr blocked automated reading.
-- Whether 4DRGS reproduces its README numbers on this GPU (not run).
 
 ## Resolved on Oct 4
 
