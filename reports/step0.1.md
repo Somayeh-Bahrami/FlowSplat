@@ -12,11 +12,11 @@ Decided by the project owner on Oct 1:
 | Plan bullet | This pass |
 |---|---|
 | Run R2-Gaussian on a CUDA GPU, reproduce one static reconstruction | Done: `0_chest_cone`, PSNR 3D within 0.06 dB of published |
-| Check whether 4DRGS code is public; if yes, run it on one case | Public: yes. Run: not done (submodule build failed, see 4DRGS section) |
+| Check whether 4DRGS code is public; if yes, run it on one case | Public: yes. Run: not done yet (submodule build failed on missing <cstdint>; retry with the build flag added Oct 4, run with FLOWSPLAT_ONLY_4DRGS=1 pending) |
 | Confirm TIGRE on the same GPU environment | Done: forward projection check passes |
-| OpenReview profile | Skipped for now |
-| Data-request emails to 4DRGS and PUNCH authors | Skipped for now |
-| CADICA download | Skipped for now |
+| OpenReview profile | Done (owner, Oct 3) |
+| Data-request emails to 4DRGS and PUNCH authors | Done (owner, Oct 3) |
+| CADICA download | Done (owner, Oct 3) |
 
 ## Where things run
 
@@ -200,12 +200,12 @@ project."
 
 Not part of the DoD:
 
-1. **4DRGS on case2 (plan bullet).** Its rasterizer submodule fails on the
-   missing `<cstdint>`. Same build-flag retry as the R2-Gaussian rasterizer
-   should fix it (not yet in the 4DRGS cell). Needed by Step 4.1 (baseline 1,
-   Oct 27), not by Step 1.1.
-2. **CADICA download:** done (owner, Oct 3).
-3. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
+1. **4DRGS on case2 (plan bullet).** Its rasterizer submodule failed on the
+   missing `<cstdint>`. The 4DRGS cell now retries with the same build flag
+   as the R2-Gaussian rasterizer (Oct 4); run `FLOWSPLAT_ONLY_4DRGS=1 python
+   notebooks/step0_setup.py` (skips the chest example, writes
+   `results/step0.1_4drgs.json`). Needed by Step 4.1 (baseline 1, Oct 27).
+2. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
    which split each is: UNVERIFIED. TIGRE version string not recorded.
 
 ## Not verified

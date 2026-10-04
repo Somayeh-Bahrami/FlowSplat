@@ -58,5 +58,8 @@ def test_view_subsets():
     vs = rt.view_subsets(133)
     assert len(vs["30"]["train"]) == 30 and len(vs["60"]["train"]) == 60
     assert vs["133"]["test"] == []
-    assert vs["30"]["train"][0] == 0 and vs["30"]["train"][-1] == 132
+    # 4DRGS Sec 2: j_k = floor((k - 1) T / N) + 1 (1-based)
+    assert vs["30"]["train"] == [int(np.floor((k - 1) * 133 / 30)) for k in range(1, 31)]
+    assert vs["30"]["train"][0] == 0 and vs["30"]["train"][-1] == 128
+    assert vs["133"]["train"] == list(range(133))
     assert not set(vs["30"]["train"]) & set(vs["30"]["test"])

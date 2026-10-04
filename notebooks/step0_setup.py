@@ -29,7 +29,8 @@
 #   - from a bootstrap notebook or a terminal, inside the cloned repo:
 #       python notebooks/step0_setup.py
 #     (script mode starts without the button; FLOWSPLAT_RUN_4DRGS=0 skips 4DRGS;
-#     FLOWSPLAT_BUILD_ONLY=1 stops after the builds)
+#     FLOWSPLAT_BUILD_ONLY=1 stops after the builds; FLOWSPLAT_ONLY_4DRGS=1 skips
+#     the R2-Gaussian example and saves results/step0.1_4drgs.json)
 
 import marimo
 
@@ -768,53 +769,58 @@ def _(
     # notebooks/step0_imagecas_recon.py in a fresh molab session). Nothing
     # below runs, so results/step0.1.json is not overwritten.
     mo.stop(os.environ.get("FLOWSPLAT_BUILD_ONLY") == "1", mo.md("Build only: stopped after the builds."))
-    _data = WORK / "data_r2g"
-    _data.mkdir(parents=True, exist_ok=True)
-    _zip = _data / "cone_ntrain_50_angle_360.zip"
-    _found = list(_data.rglob(f"{R2G_CASE}/meta_data.json"))
-    if not _found:
-        if not _zip.exists():
-            sh([sys.executable, "-m", "gdown", R2G_DATA_ID, "-O", _zip])
-        with zipfile.ZipFile(_zip) as _z:
-            _members = [m for m in _z.namelist() if f"{R2G_CASE}/" in m]
-            _z.extractall(_data, members=_members)
+    # FLOWSPLAT_ONLY_4DRGS=1: skip this example (already reproduced, see
+    # results/step0.1.json) and run only the TIGRE check and 4DRGS.
+    if os.environ.get("FLOWSPLAT_ONLY_4DRGS") == "1":
+        r2g_result = {"skipped": "FLOWSPLAT_ONLY_4DRGS=1; see results/step0.1.json"}
+    else:
+        _data = WORK / "data_r2g"
+        _data.mkdir(parents=True, exist_ok=True)
+        _zip = _data / "cone_ntrain_50_angle_360.zip"
         _found = list(_data.rglob(f"{R2G_CASE}/meta_data.json"))
-    if not _found:
-        raise RuntimeError(f"{R2G_CASE} not found inside the R2-Gaussian dataset zip.")
-    _case = _found[0].parent
-    _out = WORK / "output_r2g" / R2G_CASE
+        if not _found:
+            if not _zip.exists():
+                sh([sys.executable, "-m", "gdown", R2G_DATA_ID, "-O", _zip])
+            with zipfile.ZipFile(_zip) as _z:
+                _members = [m for m in _z.namelist() if f"{R2G_CASE}/" in m]
+                _z.extractall(_data, members=_members)
+            _found = list(_data.rglob(f"{R2G_CASE}/meta_data.json"))
+        if not _found:
+            raise RuntimeError(f"{R2G_CASE} not found inside the R2-Gaussian dataset zip.")
+        _case = _found[0].parent
+        _out = WORK / "output_r2g" / R2G_CASE
 
-    _t0 = time.time()
-    # Default settings (30k iterations), exactly the README command plus -m.
-    _log = sh([sys.executable, "train.py", "-s", _case, "-m", _out], cwd=R2G_DIR)
-    _minutes = round((time.time() - _t0) / 60, 1)
+        _t0 = time.time()
+        # Default settings (30k iterations), exactly the README command plus -m.
+        _log = sh([sys.executable, "train.py", "-s", _case, "-m", _out], cwd=R2G_DIR)
+        _minutes = round((time.time() - _t0) / 60, 1)
 
-    _metrics = {}
-    _eval_dir = _out / "eval" / "iter_030000"
-    if _eval_dir.exists():
-        for _f in sorted(_eval_dir.glob("eval*.yml")):
-            _metrics.update(setup_check.parse_r2g_eval_yml(_f.read_text()))
-    if "psnr_3d" not in _metrics:
-        _metrics = setup_check.parse_r2g_stdout(_log)
+        _metrics = {}
+        _eval_dir = _out / "eval" / "iter_030000"
+        if _eval_dir.exists():
+            for _f in sorted(_eval_dir.glob("eval*.yml")):
+                _metrics.update(setup_check.parse_r2g_eval_yml(_f.read_text()))
+        if "psnr_3d" not in _metrics:
+            _metrics = setup_check.parse_r2g_stdout(_log)
 
-    _cmp = setup_check.compare_psnr(_metrics.get("psnr_3d"), R2G_EXPECTED["psnr_3d_case"], PSNR_TOL_DB)
-    r2g_result = {
-        "case": R2G_CASE,
-        "views": 50,
-        "iterations": 30000,
-        "train_minutes": _minutes,
-        "psnr_3d": _metrics.get("psnr_3d"),
-        "ssim_3d": _metrics.get("ssim_3d"),
-        "psnr_2d": _metrics.get("psnr_2d"),
-        "ssim_2d": _metrics.get("ssim_2d"),
-        "expected": R2G_EXPECTED,
-        "psnr_diff_db": _cmp["diff_db"],
-        "pass_within_1db": _cmp["pass"],
-    }
-    print("\n=== R2-Gaussian,", R2G_CASE, "===")
-    print(f"PSNR3D ours {r2g_result['psnr_3d']} dB | expected {R2G_EXPECTED['psnr_3d_case']} dB ({R2G_EXPECTED['psnr_source']})")
-    print(f"SSIM3D ours {r2g_result['ssim_3d']} | no per-case value published; 15-case average {R2G_EXPECTED['ssim_3d_dataset_avg']} ({R2G_EXPECTED['avg_source']})")
-    print(f"diff {_cmp['diff_db']} dB | PASS (within {PSNR_TOL_DB} dB): {_cmp['pass']} | time {_minutes} min")
+        _cmp = setup_check.compare_psnr(_metrics.get("psnr_3d"), R2G_EXPECTED["psnr_3d_case"], PSNR_TOL_DB)
+        r2g_result = {
+            "case": R2G_CASE,
+            "views": 50,
+            "iterations": 30000,
+            "train_minutes": _minutes,
+            "psnr_3d": _metrics.get("psnr_3d"),
+            "ssim_3d": _metrics.get("ssim_3d"),
+            "psnr_2d": _metrics.get("psnr_2d"),
+            "ssim_2d": _metrics.get("ssim_2d"),
+            "expected": R2G_EXPECTED,
+            "psnr_diff_db": _cmp["diff_db"],
+            "pass_within_1db": _cmp["pass"],
+        }
+        print("\n=== R2-Gaussian,", R2G_CASE, "===")
+        print(f"PSNR3D ours {r2g_result['psnr_3d']} dB | expected {R2G_EXPECTED['psnr_3d_case']} dB ({R2G_EXPECTED['psnr_source']})")
+        print(f"SSIM3D ours {r2g_result['ssim_3d']} | no per-case value published; 15-case average {R2G_EXPECTED['ssim_3d_dataset_avg']} ({R2G_EXPECTED['avg_source']})")
+        print(f"diff {_cmp['diff_db']} dB | PASS (within {PSNR_TOL_DB} dB): {_cmp['pass']} | time {_minutes} min")
     return (r2g_result,)
 
 
@@ -880,13 +886,27 @@ def _(
         try:
             _env = dict(CUDA_ENV)  # same CUDA environment as the R2-Gaussian builds
             pip_install(["pyhocon", "PyMCubes", "pymeshlab"])
-            pip_install(["--no-build-isolation", str(TCNN_DIR / "bindings" / "torch")], env=_env)
+            def _install(path, label):
+                """Plain build; on failure one retry with the same nvcc flag that
+                fixed the R2-Gaussian rasterizer (GCC 14 no longer pulls in
+                <cstdint>: 'std has no member uintptr_t', molab Oct 3). Flag only."""
+                try:
+                    pip_install(["--no-build-isolation", str(path)], env=_env)
+                except RuntimeError:
+                    _fl = "-include cfloat -include cstdint"
+                    pip_install(["--no-build-isolation", str(path)],
+                                env={**_env, "NVCC_APPEND_FLAGS": (_env.get("NVCC_APPEND_FLAGS", "") + " " + _fl).strip()})
+                    deviations.append({"what": f"{label}: built with NVCC_APPEND_FLAGS='{_fl}'",
+                                       "instead_of": "plain pip install from the 4DRGS README",
+                                       "reason": "Plain build failed with GCC 14 (missing <cstdint>). Flag only; source untouched."})
+
+            _install(TCNN_DIR / "bindings" / "torch", "tiny-cuda-nn")
             for _sub in [
                 "diff-Xray-gaussian-rasterization-voxelization-sortfree",
                 "diff-Xray-gaussian-rasterization-voxelization-legacy",
                 "simple-knn",
             ]:
-                pip_install(["--no-build-isolation", str(DRGS_DIR / "submodules" / _sub)], env=_env)
+                _install(DRGS_DIR / "submodules" / _sub, f"4DRGS {_sub}")
 
             _case = WORK / "data_4drgs" / "case2"
             if not (_case / "transforms.json").exists():
@@ -938,6 +958,7 @@ def _(
     env_info,
     json,
     mo,
+    os,
     pins,
     r2g_result,
     run_4drgs,
@@ -961,7 +982,8 @@ def _(
         "deviations": deviations,
         "source_untouched": _untouched,
     }
-    _path = FLOWSPLAT_DIR / "results" / "step0.1.json"
+    _only = os.environ.get("FLOWSPLAT_ONLY_4DRGS") == "1"
+    _path = FLOWSPLAT_DIR / "results" / ("step0.1_4drgs.json" if _only else "step0.1.json")
     _path.parent.mkdir(parents=True, exist_ok=True)
     _path.write_text(json.dumps(results, indent=2, default=str))
     print("Saved", _path)

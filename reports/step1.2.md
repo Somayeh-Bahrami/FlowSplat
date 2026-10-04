@@ -40,7 +40,8 @@ advancing along the vessel); fixed split lists saved."
    mu = 0.1 /mm (OURS). TIGRE cone beam, DSO 750 / DSD 1200 mm (4DRGS),
    detector pixel 0.64 mm (OURS, 0.4 mm at the isocentre), rotation about
    the S-I axis, R2-Gaussian noise (Poisson 1e5, Gaussian std 10).
-   View subsets 30 / 60 / 133, evenly spaced; the rest are test views.
+   View subsets 30 / 60 / 133 by the 4DRGS rule j_k = floor((k-1) T/N) + 1
+   (Sec 2; adopted Oct 4, before Step 2.1 run 3); the rest are test views.
 
 ## Numbers (bolus, M4)
 

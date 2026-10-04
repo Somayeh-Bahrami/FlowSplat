@@ -25,7 +25,7 @@ voxelized at 0.25\,mm with partial volume from the centerline and the
 stenosed radius, is filled with the simulated concentration and projected
 with TIGRE~\cite{biguri2016tigre} onto a detector with 0.64\,mm pixels;
 Poisson and Gaussian noise are added as in
-R$^2$-Gaussian~\cite{zha2024r2gaussian}. Training subsets use 30, 60 or
-all 133 evenly spaced views, the remaining frames serving as held-out
-views. The 200 cases are split by patient into 140 training, 30
+R$^2$-Gaussian~\cite{zha2024r2gaussian}. Training subsets of 30, 60 or all
+133 views are drawn with the uniform rule of 4DRGS~\cite{liu2025fourdrgs},
+the remaining frames serving as held-out views. The 200 cases are split by patient into 140 training, 30
 validation and 30 test cases.

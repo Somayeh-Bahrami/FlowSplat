@@ -106,9 +106,24 @@ The choice is kept in `~/flowsplat_work/cuda_option.json`; delete it (or set
    then generates projections, trains (about 13 min) and writes
    `results/step0.1_imagecas.json` and `results/step0.1_imagecas.png`.
 
+### Steps 1.1 to 2.1 (data and geometry init)
+
+| Step | Where | Command / notebook | Output |
+|---|---|---|---|
+| 1.1 cases | M4 | `PYTHONPATH=src python3 -m flowsplat.data_gen --imagecas_dir <labels> --out data/cases_v1 --n_geom 40 --per_geom 5 --seed 0` | `data/cases_v1/` (2.4 min) |
+| 1.2 bolus + pack | M4 | `PYTHONPATH=src python3 -m flowsplat.bolus_sim --cases data/cases_v1 --out data/bolus_v1 --seed 0 --pack data/step1_pack.zip` | `data/bolus_v1/`, `data/step1_pack.zip` (9 MB, 13 min) |
+| 1.2 render | molab | upload the pack, `python notebooks/step1_render.py` (`FLOWSPLAT_RENDER_LIMIT=N` for a trial) | `~/flowsplat_work/data/render_v1/` (200 x 133 frames, 2.86 GB, 25 min) |
+| 2.1 geometry init | molab | `python notebooks/step2_geom_init.py` (`FLOWSPLAT_INIT=fdk` default, `r2g` for the plan route) | `results/step2.1_*`, `~/flowsplat_work/step2_1/*/geom_init.npz` |
+| 0.1 4DRGS only | molab | `FLOWSPLAT_ONLY_4DRGS=1 python notebooks/step0_setup.py` | `results/step0.1_4drgs.json` |
+
+molab storage does not survive a session reset. After rendering, download
+`render_v1` in 8 parts of about 360 MB (5 patients each) with
+`mo.download` and unzip into `data/render_v1/` on the M4 (gitignored);
+re-upload what a later notebook needs.
+
 ### Known open issue
 
-4DRGS: `diff-Xray-gaussian-rasterization-voxelization-sortfree` fails with
-`namespace "std" has no member "uintptr_t"` (missing `<cstdint>`). The
-4DRGS cell does not yet use the `NVCC_APPEND_FLAGS` retry of step 7.
-tiny-cuda-nn builds fine.
+4DRGS: `diff-Xray-gaussian-rasterization-voxelization-sortfree` failed with
+`namespace "std" has no member "uintptr_t"` (missing `<cstdint>`). Since
+Oct 4 the 4DRGS cell retries with the `NVCC_APPEND_FLAGS` flag of step 7;
+not yet run (`FLOWSPLAT_ONLY_4DRGS=1`). tiny-cuda-nn builds fine.

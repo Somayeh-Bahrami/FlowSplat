@@ -113,14 +113,16 @@ def test_write_r2g_case_roundtrip(tmp_path):
     assert m["scanner"]["nVoxel"] == shape[::-1] and m["scanner"]["DSO"] == 750.0
     p0 = np.load(tmp_path / "r2g" / m["proj_train"][0]["file_path"])
     assert np.allclose(p0, proj[0].astype(np.float32)[::-1] / 0.1)  # flipped, divided by mu
-    assert m["proj_train"][-1]["angle"] == pytest.approx(np.deg2rad(198.0))
+    assert m["proj_train"][-1]["frame"] == 128  # 4DRGS subset rule, 30 of 133
+    assert m["proj_train"][-1]["angle"] == pytest.approx(np.deg2rad(198.0 * 128 / 132))
     vg = np.load(tmp_path / "r2g" / "vol_gt.npy")
     assert list(vg.shape) == shape[::-1]
     back = md.r2g_volume_to_lumen_frame(vg, perm)
     assert list(back.shape) == lum["shape"]
-    # mean concentration over the 30 training frames of a linear ramp is 0.5 everywhere
+    # mean concentration of a linear ramp over the 30 training frames (4DRGS subset)
+    expected = np.mean([np.linspace(0, 1, 133)[j] for j in rt.view_subsets(133, (30,))["30"]["train"]])
     v = back[tuple(lum["idx"].T)] / lum["frac"]
-    assert np.allclose(v, 0.5, atol=0.01)
+    assert np.allclose(v, expected, atol=0.005)
 
 
 def test_dim_segment_stays_connected():

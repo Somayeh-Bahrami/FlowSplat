@@ -122,14 +122,17 @@ def tigre_geometry_dict(shape_zyx, vox_mm=VOX_MM, det_px_mm=DET_PX_MM, dso=DSO_M
 
 
 def view_subsets(n_frames=133, sets=VIEW_SETS):
-    """Evenly spaced frame indices per view set; the rest are test views.
+    """Uniform frame subset per view set; the rest are test views.
 
-    Ref: plan (30 / 60 / 133 views); 4DRGS Sec 4.1 subsamples 30 to 60 views
-    "from the complete set" (sampling rule not stated: even spacing UNVERIFIED).
+    4DRGS Sec 2 ("Sparse-View DSA Reconstruction"): j_k = floor((k - 1) T / N)
+    + 1, k = 1..N (1-based), i.e. j = floor(k T / N), k = 0..N-1 here.
+    Ref: 4DRGS Sec 2; view counts 30 / 60 / 133 from the plan. (Until Oct 4
+    this used rounded even spacing including the last frame; changed to the
+    4DRGS rule before Step 2.1 run 3.)
     """
     out = {}
     for n in sets:
-        tr = np.unique(np.round(np.linspace(0, n_frames - 1, n)).astype(int))
+        tr = np.unique((np.arange(n) * n_frames) // n).astype(int)
         out[str(n)] = {"train": tr.tolist(), "test": sorted(set(range(n_frames)) - set(tr.tolist()))}
     return out
 
