@@ -937,10 +937,18 @@ def _(
             if not _leap_ok():
                 if _ilu.find_spec("cmake") is None:
                     pip_install(["cmake"])
+                # The molab image has no `make`, so CMake's default generator
+                # (Unix Makefiles) fails ("unable to find a build program",
+                # molab Oct 4). Ninja is installed; CMAKE_GENERATOR is read by
+                # CMake >= 3.15, so build.sh runs unchanged. Compilers explicit.
                 _benv = {**_env, "CUDACXX": str(Path(_env["CUDA_HOME"]) / "bin" / "nvcc"),
                          "CUDA_TOOLKIT_ROOT_DIR": _env["CUDA_HOME"],
+                         "CMAKE_GENERATOR": "Ninja", "CC": "gcc", "CXX": "g++", "CUDAHOSTCXX": "g++",
                          "PATH": _sc.get_paths()["scripts"] + os.pathsep + os.environ.get("PATH", "")}
                 sh(["bash", "./etc/build.sh"], cwd=LEAP_DIR, env=_benv)
+                deviations.append({"what": "LEAP built with CMAKE_GENERATOR=Ninja, CC=gcc, CXX=g++, CUDAHOSTCXX=g++",
+                                   "instead_of": "plain `sh ./etc/build.sh` (Unix Makefiles) from the 4DRGS README",
+                                   "reason": "No `make` in the molab image. Environment only; LEAP source untouched."})
                 _sh.copy(LEAP_DIR / "build" / "lib" / "libleapct.so", LEAP_DIR / "libleapct.so")
                 sh([sys.executable, "manual_install.py"], cwd=LEAP_DIR)
                 if not _leap_ok():

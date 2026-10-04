@@ -211,7 +211,10 @@ Not part of the DoD:
    --fdk_toolbox=tigre). LEAP is now cloned (pinned `0c8846f`) and built as
    in the 4DRGS README. Attempt 2 (Oct 4, repo `c83190b`,
    `results/step0.1_4drgs_attempt2.json`): `bash ./etc/build.sh` of LEAP
-   failed; the compiler error is not in the saved JSON (log needed).
+   failed. Log (attempt 3, Oct 4, `7abd757`): `CMake was unable to find a
+   build program corresponding to "Unix Makefiles"` (no `make` in the molab
+   image). Fix: CMAKE_GENERATOR=Ninja plus explicit CC / CXX / CUDAHOSTCXX
+   (environment only); attempt 4 pending.
 
 ## Not verified
 
