@@ -16,6 +16,8 @@ chain of tube-aligned Gaussians mapped to s with sigma = R / sqrt(2)
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from scipy.ndimage import label as cc_label
 from scipy.ndimage import map_coordinates
@@ -433,3 +435,133 @@ def fdk_volume_lumen_frame(render_npz, n_views=60, filt="hann"):
     ang = np.deg2rad(z["angles_deg"][tr]).astype(np.float32)
     vol_t = algs.fdk(proj, rt.tigre_geo(meta["geometry"]), ang, filter=filt)
     return np.asarray(vol_t).transpose(np.argsort(meta["axis_perm"])), meta
+
+
+# ============================ cone-beam Gaussian projector ============================
+# Geometry convention of the detector relative to TIGRE (sign of the angle,
+# a start offset, signs of the u and v detector axes). Calibrated on Oct 4
+# against the TIGRE renders of Step 1.2 (ground-truth tube with the true
+# concentration, 32 conventions, case 121_0): this default is the only one
+# that matches (relative error 0.26 vs 0.65 or more for all others at
+# 60 and 105 deg); results/step2.2_projector_convention.json.
+DEFAULT_CONVENTION = {"s_theta": 1.0, "theta0": 0.0, "s_u": 1.0, "s_v": 1.0}
+
+
+class ConeProjector:
+    """Exact line integrals of 3D Gaussians along the rays of a flat-panel
+    cone-beam scanner with the TIGRE geometry fields (DSO, DSD, nDetector
+    [v, u], dDetector [v, u]; volume centred at the isocentre).
+
+    For a ray from source S with unit direction r and a Gaussian with peak
+    density rho, centre m and covariance Sigma (x0 = m - S, P = Sigma^-1):
+        int rho exp(-1/2 (S + l r - m)^T P (S + l r - m)) dl
+          = rho sqrt(2 pi / a) exp(-1/2 (c - b^2 / a)),
+        a = r^T P r, b = r^T P x0, c = x0^T P x0.
+    This is the X-ray rendering of R2-Gaussian (each Gaussian contributes its
+    exact line integral, "rectified" splatting) evaluated per ray in PyTorch;
+    exact for every ray, no local affine approximation.
+
+    Ref: R2-Gaussian Sec 3.1 Eq 1 and Sec 4.2.1 (line integral of radiative
+    Gaussians); plan, Approach (y = sum_i mu_I c_i(t) G_i^2D(p)). Closed form:
+    standard Gaussian integral. Implementation in PyTorch instead of the CUDA
+    rasterizer: OURS (about 300 tube Gaussians per case; runs on the M4).
+    """
+
+    def __init__(self, gd, convention=None, device="cpu", dtype=None):
+        import torch
+
+        self.torch = torch
+        self.dtype = torch.float32 if dtype is None else dtype
+        self.device = device
+        self.dso, self.dsd = float(gd["DSO"]), float(gd["DSD"])
+        self.nv, self.nu = (int(x) for x in gd["nDetector"])
+        dv, du = (float(x) for x in gd["dDetector"])
+        self.conv = dict(DEFAULT_CONVENTION if convention is None else convention)
+        self.u = (torch.arange(self.nu, dtype=self.dtype, device=device) + 0.5 - self.nu / 2) * du
+        self.v = (torch.arange(self.nv, dtype=self.dtype, device=device) + 0.5 - self.nv / 2) * dv
+
+    def frame(self, theta):
+        """Source position S and unit axes (e: source to detector, u, v)."""
+        torch = self.torch
+        c = self.conv
+        th = c["s_theta"] * float(theta) + c["theta0"]
+        cos, sin = math.cos(th), math.sin(th)
+        s = torch.tensor([self.dso * cos, self.dso * sin, 0.0], dtype=self.dtype, device=self.device)
+        e = torch.tensor([-cos, -sin, 0.0], dtype=self.dtype, device=self.device)
+        u = c["s_u"] * torch.tensor([-sin, cos, 0.0], dtype=self.dtype, device=self.device)
+        v = c["s_v"] * torch.tensor([0.0, 0.0, 1.0], dtype=self.dtype, device=self.device)
+        return s, e, u, v
+
+    def rays(self, theta):
+        """Unit ray directions for every pixel, shape (nv * nu, 3), and S."""
+        s, e, u, v = self.frame(theta)
+        pts = (s + self.dsd * e)[None, None, :] + self.v[:, None, None] * v + self.u[None, :, None] * u
+        r = pts.reshape(-1, 3) - s
+        return r / r.norm(dim=1, keepdim=True), s
+
+    def footprint(self, means, cov, theta, prec=None):
+        """Line integral of each unit-density Gaussian along every ray of one
+        view, shape (N, nv * nu)."""
+        torch = self.torch
+        prec = torch.linalg.inv(cov) if prec is None else prec  # (N, 3, 3)
+        r, s = self.rays(theta)  # (P, 3)
+        x0 = means - s  # (N, 3)
+        px0 = torch.einsum("nij,nj->ni", prec, x0)
+        c = (x0 * px0).sum(-1)  # (N,)
+        pr = torch.einsum("nij,pj->npi", prec, r)  # (N, P, 3)
+        a = (pr * r[None]).sum(-1)  # (N, P)
+        b = px0 @ r.T  # (N, P)
+        return torch.sqrt(2 * math.pi / a) * torch.exp(-0.5 * (c[:, None] - b * b / a))
+
+    def render(self, means, cov, rho, thetas):
+        """Projections (V, nv, nu) of N Gaussians with peak densities rho (V, N)."""
+        torch = self.torch
+        prec = torch.linalg.inv(cov)
+        out = [(rho[j][:, None] * self.footprint(means, cov, th, prec)).sum(0) for j, th in enumerate(thetas)]
+        return torch.stack(out).reshape(len(thetas), self.nv, self.nu)
+
+    def footprints(self, means, cov, thetas):
+        """Footprints of all views (V, N, nv * nu) for frozen geometry (Stage A)."""
+        torch = self.torch
+        prec = torch.linalg.inv(cov)
+        return torch.stack([self.footprint(means, cov, th, prec) for th in thetas])
+
+
+def bin_detector(proj, gd, f):
+    """f x f detector binning (mean) of projections (V, nv, nu) and the
+    matching geometry (fewer, larger pixels). Used to run on the M4. Ref: OURS."""
+    import torch
+
+    v, nv, nu = proj.shape
+    nv2, nu2 = nv // f, nu // f
+    p = proj[:, : nv2 * f, : nu2 * f].reshape(v, nv2, f, nu2, f).mean(dim=(2, 4))
+    g = dict(gd)
+    g["nDetector"] = [nv2, nu2]
+    g["dDetector"] = [gd["dDetector"][0] * f, gd["dDetector"][1] * f]
+    g["sDetector"] = [nv2 * g["dDetector"][0], nu2 * g["dDetector"][1]]
+    return p, g
+
+
+def lumen_to_world(xyz_mm, lumen, axis_perm):
+    """Lumen-grid frame (mm, Step 1.2 renderer) -> TIGRE world frame (mm,
+    volume centred at the isocentre, x = last array axis). Returns
+    (world (N, 3), M) with M the axis permutation matrix. Ref: TIGRE voxel
+    centres at (i + 0.5 - n/2) d; array order [z, y, x] (render_tigre)."""
+    xyz = np.asarray(xyz_mm, dtype=float)
+    vox = float(lumen["vox_mm"])
+    shape_t = [lumen["shape"][p] for p in axis_perm]  # [nz, ny, nx]
+    n_xyz = np.array([shape_t[2], shape_t[1], shape_t[0]], dtype=float)
+    m = np.zeros((3, 3))
+    m[0, axis_perm[2]] = m[1, axis_perm[1]] = m[2, axis_perm[0]] = 1.0
+    idx = (xyz - np.asarray(lumen["origin_mm"])) / vox
+    return (idx @ m.T + 0.5 - n_xyz / 2) * vox, m
+
+
+def world_to_lumen(world_mm, lumen, axis_perm):
+    """Inverse of lumen_to_world. Ref: OURS."""
+    vox = float(lumen["vox_mm"])
+    shape_t = [lumen["shape"][p] for p in axis_perm]
+    n_xyz = np.array([shape_t[2], shape_t[1], shape_t[0]], dtype=float)
+    _, m = lumen_to_world(np.zeros((1, 3)), lumen, axis_perm)
+    idx = (np.asarray(world_mm, dtype=float) / vox - 0.5 + n_xyz / 2) @ m
+    return np.asarray(lumen["origin_mm"]) + idx * vox

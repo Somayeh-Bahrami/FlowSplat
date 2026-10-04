@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-04",
+  "method": "Ground-truth tube Gaussians of case 121_0 (Step 1.1 centerline + stenosed radius, 0.5 mm spacing) filled with the true concentration c(s, t_j) of the Step 1.2 bolus, projected with flowsplat.model.ConeProjector under 32 conventions (s_theta in +-1, theta0 in 0/90/180/270 deg, s_u in +-1, s_v in +-1) and compared with the TIGRE renders of Step 1.2 (relative L2 error)",
+  "chosen": {"s_theta": 1.0, "theta0": 0.0, "s_u": 1.0, "s_v": 1.0},
+  "relative_error_chosen_vs_next_best": {
+    "frame_40_60deg": [0.261, 0.794],
+    "frame_70_105deg": [0.267, 0.649],
+    "frame_100_150deg": [0.476, 0.699]
+  },
+  "note": "Remaining error: Gaussian versus uniform-disk cross-section profile and the clipped detector noise floor (positive mean, also in contrast-free frames). Frames without contrast (frame 10) are not informative."
+}
