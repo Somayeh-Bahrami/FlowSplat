@@ -1,7 +1,8 @@
 # Step 2.1: Geometry initialisation and tube-aligned Gaussians
 
 Dates: Oct 12 to Oct 14, 2026 (started Oct 3). Status: **in progress**:
-code and tests done on the M4; molab run pending.
+plan route failed the DoD (run 1); fallback (FDK skeleton) implemented, run
+pending.
 
 Plan DoD: "Lumen radius error below 0.2 mm on 5 validation cases."
 
@@ -48,7 +49,36 @@ distance 0.15 mm.
 
 ## Results (molab)
 
-TODO.
+### Run 1: static R2-Gaussian (plan route), Oct 4, repo `43a1eb5`, 60 views
+
+| Case | Radius MAE (mm) | Bias (mm) | p90 (mm) | Centerline distance (mm) | Length est / GT (mm) | Pass |
+|---|---|---|---|---|---|---|
+| 121_0 | 0.230 | -0.163 | 0.62 | 0.73 | 157.0 / 150.0 | no |
+| 122_0 | 0.199 | -0.110 | 0.41 | 0.98 | 175.0 / 162.5 | yes |
+| 130_0 | 0.211 | -0.051 | 0.48 | 1.43 | 173.5 / 163.5 | no |
+| 131_0 | 0.425 | -0.310 | 0.83 | 1.93 | 116.0 / 104.0 | no |
+| 135_0 | 0.324 | -0.307 | 0.74 | 0.77 | 122.5 / 117.5 | no |
+
+Mean MAE 0.278 mm; 1 of 5 below 0.2 mm. **DoD failed.** R2-Gaussian 13 to
+26 min per case.
+
+Diagnosis: for 135_0, R2-Gaussian's own 3D PSNR against the time-averaged
+ground truth is 34.3 dB at iteration 1 (its FDK initialisation) and drops
+to 32.3 dB at 30k while the 2D PSNR only reaches 28 dB. A static model
+cannot explain views taken at different times; fitting them pulls the
+volume away from the vessel (centerline 0.7 to 1.9 mm off the axis vs.
+0.15 mm on the synthetic tube; radius biased low). A frame error would
+show a poor PSNR from iteration 1, which is not the case. Figures and the
+output zip of run 1 did not reach the M4 (only the printed summary).
+
+### Fallback applied (rule 2)
+
+Plan, Step 2.1 Fallback: "If Gaussians do not align with the vessel:
+initialize directly from the ground-truth-free FDK volume skeleton."
+
+`FLOWSPLAT_INIT=fdk` (now the default): TIGRE FDK with a Hann filter (as
+the 4DRGS FDK baseline, Sec 4.1) of the same 60 views, then the same
+centerline and half-maximum radius. Run 2: TODO.
 
 ## DoD
 
@@ -56,7 +86,7 @@ TODO.
 |---|---|
 | Lumen radius error < 0.2 mm on 5 validation cases | TODO |
 
-**DoD met: no (in progress). Fallback used: no.**
+**DoD met: no (in progress). Fallback used: yes (FDK volume skeleton), run pending.**
 
 Plan fallback (if Gaussians do not align with the vessel): "initialize
 directly from the ground-truth-free FDK volume skeleton."

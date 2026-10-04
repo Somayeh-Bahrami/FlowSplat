@@ -134,6 +134,20 @@ def view_subsets(n_frames=133, sets=VIEW_SETS):
     return out
 
 
+def tigre_geo(gd):
+    """TIGRE geometry object from a `tigre_geometry_dict` (molab). Ref: TIGRE
+    geometry fields, as in R2-Gaussian ct_utils.get_geometry_tigre."""
+    import tigre
+
+    geo = tigre.geometry(mode="cone", nVoxel=np.array(gd["nVoxel"]), default=True)
+    for k in ("DSD", "DSO", "nDetector", "dDetector", "sDetector", "nVoxel", "dVoxel", "sVoxel", "offOrigin", "offDetector"):
+        setattr(geo, k, np.array(gd[k], dtype=float) if isinstance(gd[k], list) else float(gd[k]))
+    geo.nDetector = geo.nDetector.astype(int)
+    geo.nVoxel = geo.nVoxel.astype(int)
+    geo.accuracy = gd["accuracy"]
+    return geo
+
+
 def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True):
     """Project all frames of one case (Step 1.1 case file with the stenosed
     radius r_mm, Step 1.2 bolus file). Returns (proj float16 [T, nv, nu], meta).
@@ -152,12 +166,7 @@ def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True
     idx = lum["idx"][:, perm]
     shape = [lum["shape"][p] for p in perm]
     gd = tigre_geometry_dict(shape)
-    geo = tigre.geometry(mode="cone", nVoxel=np.array(gd["nVoxel"]), default=True)
-    for k in ("DSD", "DSO", "nDetector", "dDetector", "sDetector", "nVoxel", "dVoxel", "sVoxel", "offOrigin", "offDetector"):
-        setattr(geo, k, np.array(gd[k], dtype=float) if isinstance(gd[k], list) else float(gd[k]))
-    geo.nDetector = geo.nDetector.astype(int)
-    geo.nVoxel = geo.nVoxel.astype(int)
-    geo.accuracy = gd["accuracy"]
+    geo = tigre_geo(gd)
     angles = np.deg2rad(b["angles_deg"]).astype(np.float32)
     rng = np.random.default_rng(seed)
     vol = np.zeros(shape, dtype=np.float32)

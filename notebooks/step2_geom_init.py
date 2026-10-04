@@ -7,7 +7,9 @@
 #      build-only)
 #   b) data: pack_v1 (cases, geometries, bolus) and render_v1; the 5 cases
 #      are rendered here if missing (fresh session)
-#   c) per case: write the views as an R2-Gaussian dataset
+#   c) per case (FLOWSPLAT_INIT=fdk, default since Oct 4: plan FALLBACK, TIGRE
+#      FDK volume of the same views; FLOWSPLAT_INIT=r2g: the original route):
+#      write the views as an R2-Gaussian dataset
 #      (flowsplat.model.write_r2g_case), run R2-Gaussian's own
 #      initialize_pcd.py and train.py at defaults (static model on the
 #      dynamic views = time-averaged volume, plan Step 2.1)
@@ -60,9 +62,13 @@ def _(Path, mo, os, sys):
     RENDER = WORK / "data" / "render_v1"
     OUT = WORK / "step2_1"
     N_VIEWS = int(os.environ.get("FLOWSPLAT_VIEWS", "60"))
+    # Plan Step 2.1: static R2-Gaussian ("r2g"). Its DoD failed on Oct 4
+    # (radius MAE 0.20 to 0.42 mm), so the plan's fallback "fdk" (FDK volume
+    # skeleton) is the default.
+    INIT = os.environ.get("FLOWSPLAT_INIT", "fdk")
     DOD_MM = 0.2  # plan, Step 2.1 DoD
-    print("views:", N_VIEWS, "| out:", OUT)
-    return DATA, DOD_MM, FLOWSPLAT_DIR, N_VIEWS, OUT, PACK, R2G_DIR, RENDER, md, rt
+    print("views:", N_VIEWS, "| init:", INIT, "| out:", OUT)
+    return DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, OUT, PACK, R2G_DIR, RENDER, md, rt
 
 
 @app.cell
@@ -113,33 +119,46 @@ def _(DATA, PACK, RENDER, ext_ready, json, np, os, rt, zipfile):
 
 
 @app.cell
-def _(CASES, DATA, N_VIEWS, OUT, R2G_DIR, RENDER, md, np, subprocess, sys, time):
-    # c) static R2-Gaussian per case (official scripts, defaults)
+def _(CASES, DATA, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, json, md, np, subprocess, sys, time):
+    # c) init volume per case, saved in the lumen frame:
+    #    INIT=r2g: static R2-Gaussian (official scripts, defaults), plan Step 2.1
+    #    INIT=fdk: TIGRE FDK (Hann) of the same views, plan Step 2.1 FALLBACK
     runs = {}
     for _c in CASES:
-        _d = OUT / f"{_c}_v{N_VIEWS}" / "data"
-        _m = OUT / f"{_c}_v{N_VIEWS}" / "model"
-        _info = md.write_r2g_case(RENDER / f"{_c}.npz", DATA / "cases" / f"{_c}.npz", DATA / "bolus" / f"{_c}.npz",
-                                  _d, n_views=N_VIEWS)
-        _vg = np.load(_d / "vol_gt.npy")
-        _n_fg = int((_vg > 0.05).sum())
-        _cmd = [sys.executable, "initialize_pcd.py", "--data", str(_d)]
+        _base = OUT / f"{_c}_v{N_VIEWS}_{INIT}"
+        _base.mkdir(parents=True, exist_ok=True)
+        _meta = json.loads(str(np.load(RENDER / f"{_c}.npz")["meta"]))
+        _lum = _meta["lumen"]
         _dev = []
-        if _n_fg < 75000:  # same rule as the Step 0.1 ImageCAS run
-            _cmd += ["--n_points", str(max(5000, _n_fg // 2))]
-            _dev.append(f"initialize_pcd.py --n_points {max(5000, _n_fg // 2)} ({_n_fg} GT voxels > 0.05)")
-        for _old in _d.glob("init_*.npy"):
-            _old.unlink()
-        subprocess.run(_cmd, cwd=str(R2G_DIR), check=True)
         _t0 = time.time()
-        subprocess.run([sys.executable, "train.py", "-s", str(_d), "-m", str(_m)], cwd=str(R2G_DIR), check=True)
-        runs[_c] = {**_info, "model": str(_m), "train_minutes": round((time.time() - _t0) / 60, 1), "deviations": _dev}
-        print(_c, runs[_c]["train_minutes"], "min", flush=True)
+        _ev_dir = None
+        if INIT == "fdk":
+            _lv, _ = md.fdk_volume_lumen_frame(RENDER / f"{_c}.npz", n_views=N_VIEWS)
+        else:
+            _d, _m = _base / "data", _base / "model"
+            _info = md.write_r2g_case(RENDER / f"{_c}.npz", DATA / "cases" / f"{_c}.npz", DATA / "bolus" / f"{_c}.npz",
+                                      _d, n_views=N_VIEWS)
+            _n_fg = int((np.load(_d / "vol_gt.npy") > 0.05).sum())
+            _cmd = [sys.executable, "initialize_pcd.py", "--data", str(_d)]
+            if _n_fg < 75000:  # same rule as the Step 0.1 ImageCAS run
+                _cmd += ["--n_points", str(max(5000, _n_fg // 2))]
+                _dev.append(f"initialize_pcd.py --n_points {max(5000, _n_fg // 2)} ({_n_fg} GT voxels > 0.05)")
+            for _old in _d.glob("init_*.npy"):
+                _old.unlink()
+            subprocess.run(_cmd, cwd=str(R2G_DIR), check=True)
+            subprocess.run([sys.executable, "train.py", "-s", str(_d), "-m", str(_m)], cwd=str(R2G_DIR), check=True)
+            _lv = md.r2g_volume_to_lumen_frame(np.load(_m / "point_cloud" / "iteration_30000" / "vol_pred.npy"),
+                                               _info["axis_perm"])
+            _ev_dir = str(_m / "eval" / "iter_030000")
+        np.save(_base / "vol_lumen.npy", _lv.astype(np.float32))
+        runs[_c] = {"base": str(_base), "lumen": _lum, "minutes": round((time.time() - _t0) / 60, 1),
+                    "deviations": _dev, "eval_dir": _ev_dir}
+        print(_c, INIT, runs[_c]["minutes"], "min", flush=True)
     return (runs,)
 
 
 @app.cell
-def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, N_VIEWS, OUT, json, md, np, runs, time):
+def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, runs, time):
     # d) geometry from the static volume, radius error, tube Gaussians
     import matplotlib as _mpl
 
@@ -152,8 +171,7 @@ def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, N_VIEWS, OUT, json, md, np, runs, time
     rows = []
     for _c in CASES:
         _r = runs[_c]
-        _vol = np.load(f"{_r['model']}/point_cloud/iteration_30000/vol_pred.npy")
-        _lv = md.r2g_volume_to_lumen_frame(_vol, _r["axis_perm"])
+        _lv = np.load(f"{_r['base']}/vol_lumen.npy")
         _lum = _r["lumen"]
         _case = np.load(DATA / "cases" / f"{_c}.npz")
         s_e, xyz_e, r_e = md.build_from_volume(_lv, _lum["vox_mm"], _lum["origin_mm"])
@@ -161,38 +179,40 @@ def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, N_VIEWS, OUT, json, md, np, runs, time
         _err = md.radius_error(xyz_e, r_e, _case["s"], _case["xyz_mm"], _case["r_mm"])
         _tg = md.TubeGaussians(s_e, xyz_e, r_e)
         _ev = {}
-        for _f in sorted((OUT / f"{_c}_v{N_VIEWS}" / "model" / "eval" / "iter_030000").glob("eval*.yml")):
-            _ev[_f.stem] = {k: v for k, v in _yaml.safe_load(_f.read_text()).items() if isinstance(v, (int, float))}
+        if _r["eval_dir"]:
+            for _f in sorted(Path(_r["eval_dir"]).glob("eval*.yml")):
+                _ev[_f.stem] = {k: v for k, v in _yaml.safe_load(_f.read_text()).items() if isinstance(v, (int, float))}
         _p = json.loads(str(_case["params"]))
-        np.savez(OUT / f"{_c}_v{N_VIEWS}" / "geom_init.npz", s=s_e, xyz_mm=xyz_e, r_mm=r_e)
-        row = {"case": _c, "views": N_VIEWS, **_err, "alignment_loss_init": float(_tg.alignment_loss().item()),
+        np.savez(f"{_r['base']}/geom_init.npz", s=s_e, xyz_mm=xyz_e, r_mm=r_e)
+        row = {"case": _c, "views": N_VIEWS, "init": INIT, **_err, "alignment_loss_init": float(_tg.alignment_loss().item()),
                "n_gaussians": int(len(s_e)), "length_est_mm": float(s_e[-1]), "length_gt_mm": float(_case["s"][-1]),
                "stenosis_degree_gt": _p["stenosis_degree"], "r_min_gt_mm": _p["r_min_mm"],
-               "r2g_eval": _ev, "train_minutes": _r["train_minutes"], "deviations": _r["deviations"],
+               "r2g_eval": _ev, "minutes": _r["minutes"], "deviations": _r["deviations"],
                "pass": _err["mae_mm"] < DOD_MM}
         rows.append(row)
         _fig, _ax = _plt.subplots(1, 2, figsize=(14, 4))
         _ax[0].imshow(_lv.max(axis=2).T, origin="lower", cmap="gray")
-        _ax[0].set_title(f"{_c}: static R2-Gaussian, MIP")
+        _ax[0].set_title(f"{_c}: init volume ({INIT}), MIP")
         _ax[1].plot(_case["s"], _case["r_mm"], label="GT")
         _ax[1].plot(s_e, r_e, label=f"estimate (MAE {_err['mae_mm']:.3f} mm)")
         _ax[1].set_xlabel("s (mm)")
         _ax[1].set_ylabel("R (mm)")
         _ax[1].legend()
         _fig.tight_layout()
-        _fig.savefig(_res / f"step2.1_{_c}_v{N_VIEWS}.png", dpi=80)
+        _fig.savefig(_res / f"step2.1_{_c}_v{N_VIEWS}_{INIT}.png", dpi=80)
         _plt.close(_fig)
         print(json.dumps({k: v for k, v in row.items() if k != "r2g_eval"}), flush=True)
     summary = {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "views": N_VIEWS,
+        "init": INIT,
         "dod_mm": DOD_MM,
         "mae_mm_per_case": {r["case"]: round(r["mae_mm"], 4) for r in rows},
         "mae_mm_mean": float(np.mean([r["mae_mm"] for r in rows])),
         "all_pass": all(r["pass"] for r in rows),
         "rows": rows,
     }
-    (_res / f"step2.1_geom_init_v{N_VIEWS}.json").write_text(json.dumps(summary, indent=2, default=str))
+    (_res / f"step2.1_geom_init_v{N_VIEWS}_{INIT}.json").write_text(json.dumps(summary, indent=2, default=str))
     print(json.dumps({k: v for k, v in summary.items() if k != "rows"}, indent=2))
     return
 

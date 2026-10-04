@@ -367,3 +367,27 @@ def r2g_volume_to_lumen_frame(vol_r2g, axis_perm):
     write_r2g_case)."""
     vt = np.asarray(vol_r2g).transpose(2, 1, 0)
     return vt.transpose(np.argsort(axis_perm))
+
+
+def fdk_volume_lumen_frame(render_npz, n_views=60, filt="hann"):
+    """Step 2.1 FALLBACK init volume: TIGRE FDK of the training views,
+    returned in the lumen-grid frame and in concentration units (/ mu).
+
+    Ref: plan Step 2.1 fallback ("initialize directly from the
+    ground-truth-free FDK volume skeleton"); FDK with Hann filter as the
+    4DRGS FDK baseline (4DRGS Sec 4.1, "FDK with hann filtering", via
+    TIGRE). Runs on: molab (TIGRE + CUDA).
+    """
+    import json
+
+    import tigre.algorithms as algs
+
+    from flowsplat import render_tigre as rt
+
+    z = np.load(render_npz)
+    meta = json.loads(str(z["meta"]))
+    tr = rt.view_subsets(len(z["angles_deg"]), (n_views,))[str(n_views)]["train"]
+    proj = (z["proj"].astype(np.float32)[tr] / meta["mu_per_mm"]).copy()
+    ang = np.deg2rad(z["angles_deg"][tr]).astype(np.float32)
+    vol_t = algs.fdk(proj, rt.tigre_geo(meta["geometry"]), ang, filter=filt)
+    return np.asarray(vol_t).transpose(np.argsort(meta["axis_perm"])), meta
