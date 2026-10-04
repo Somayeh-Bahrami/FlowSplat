@@ -261,3 +261,15 @@ def test_notebook_no_global_defined_twice(nb):
                 continue
             assert n not in seen, f"{nb}: '{n}' defined in cells at lines {seen[n]} and {c.lineno}"
             seen[n] = c.lineno
+
+
+def test_merge_r2g_eval_files_keeps_train_and_test():
+    files = [
+        ("eval2d_render_test.yml", "psnr_2d: 49.55\nssim_2d: 0.985\n"),
+        ("eval2d_render_train.yml", "psnr_2d: 45.26\nssim_2d: 0.983\n"),
+        ("eval3d.yml", "psnr_3d: 35.15\nssim_3d: 0.935\n"),
+    ]
+    out = sc.merge_r2g_eval_files(files)
+    assert out["psnr_2d_test"] == 49.55 and out["psnr_2d_train"] == 45.26
+    assert out["psnr_2d"] == 49.55  # the value R2-Gaussian prints
+    assert out["psnr_3d"] == 35.15

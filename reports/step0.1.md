@@ -95,8 +95,8 @@ Sec 3.2 command).
 |---|---|---|---|
 | PSNR 3D (dB) | **35.146** | 35.09 | R2-Gaussian repo, `assets/results.md`, table "Synthetic dataset", row Chest, column "R2-Gaussian (50-view)" |
 | SSIM 3D | 0.935 | no per-case value published | For orientation only: 15-case average 0.952 (paper Table 1, synthetic, 50-view, "Ours (iter=30k)") |
-| PSNR 2D (dB) | 45.261 (eval yml); stdout at iter 30000 says 49.553. Which split each number is: UNVERIFIED | not published | |
-| SSIM 2D | 0.983 (eval yml); stdout says 0.985 | not published | |
+| PSNR 2D (dB) | test views: 49.553 (printed by R2-Gaussian); train views: 45.261 (the saved value came from the train yml) | not published | |
+| SSIM 2D | test views: 0.985; train views: 0.983 | not published | |
 | Training time (min) | 13.0 | 5 to 15 on an RTX 3090 | README Sec 3.2 |
 
 Pass rule: abs(ours minus expected) <= 1 dB on PSNR 3D. Difference: +0.056 dB. **Pass: yes.**
@@ -108,7 +108,7 @@ value must equal the cube side length `sVoxel` within 2%.
 
 | Item | Value |
 |---|---|
-| TIGRE version | not reported (`tigre.__version__` is missing); commit `6b0951a` |
+| TIGRE version | 3.1.3 (pip log on molab, Oct 3; `tigre.__version__` does not exist, now read from package metadata); commit `6b0951a` |
 | Projection shape | [4, 64, 64] |
 | Central value vs expected | 256.002 vs 256.0 (relative error 1e-5) |
 | Forward time | 127.3 ms |
@@ -205,12 +205,19 @@ Not part of the DoD:
    as the R2-Gaussian rasterizer (Oct 4); run `FLOWSPLAT_ONLY_4DRGS=1 python
    notebooks/step0_setup.py` (skips the chest example, writes
    `results/step0.1_4drgs.json`). Needed by Step 4.1 (baseline 1, Oct 27).
-2. Small: PSNR 2D differs between stdout (49.55) and the eval yml (45.26);
-   which split each is: UNVERIFIED. TIGRE version string not recorded.
 
 ## Not verified
 
-- Which 2D split the stored PSNR 2D / SSIM 2D come from (see above).
 - simple-knn setup.py contents (reason the plain `-e` install was not
   importable): UNVERIFIED, gitlab.inria.fr blocked automated reading.
 - Whether 4DRGS reproduces its README numbers on this GPU (not run).
+
+## Resolved on Oct 4
+
+- PSNR 2D mismatch: R2-Gaussian's train.py evaluates the train views, then
+  the test views, and prints the last (test) value; our parser merged both
+  yml files and the train file overwrote the test one.
+  `setup_check.merge_r2g_eval_files` now keeps both (`psnr_2d_test`,
+  `psnr_2d_train`).
+- TIGRE version 3.1.3 (from the pip log); the TIGRE cell now reads it from
+  package metadata.

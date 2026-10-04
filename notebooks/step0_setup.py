@@ -798,8 +798,8 @@ def _(
         _metrics = {}
         _eval_dir = _out / "eval" / "iter_030000"
         if _eval_dir.exists():
-            for _f in sorted(_eval_dir.glob("eval*.yml")):
-                _metrics.update(setup_check.parse_r2g_eval_yml(_f.read_text()))
+            _metrics.update(setup_check.merge_r2g_eval_files(
+                [(_f.name, _f.read_text()) for _f in sorted(_eval_dir.glob("eval*.yml"))]))
         if "psnr_3d" not in _metrics:
             _metrics = setup_check.parse_r2g_stdout(_log)
 
@@ -832,6 +832,8 @@ def _(r2g_result, setup_check, time, torch):
     # Ref: R2-Gaussian Sec 3.1 Eq 1 (line integral); TIGRE default geometry
     # (demo file number UNVERIFIED).
     _ = r2g_result, torch
+    import importlib.metadata as _md
+
     import numpy as _np
     import tigre as _tigre
 
@@ -846,7 +848,7 @@ def _(r2g_result, setup_check, time, torch):
     _expected = setup_check.cube_center_ray_integral(float(_geo.sVoxel[1]))
     _rel = abs(_center - _expected) / _expected
     tigre_result = {
-        "version": getattr(_tigre, "__version__", None),
+        "version": _md.version("tigre"),  # tigre has no __version__
         "proj_shape": list(_proj.shape),
         "finite": bool(_np.isfinite(_proj).all()),
         "center_value": round(_center, 3),

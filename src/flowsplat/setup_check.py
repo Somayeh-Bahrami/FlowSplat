@@ -335,3 +335,30 @@ def find_pip_cuda_prefixes(site_dirs, major: int) -> list:
             seen.add(os.path.realpath(p))
             found.append(p)
     return found
+
+
+def merge_r2g_eval_files(files) -> dict:
+    """Merge R2-Gaussian eval*.yml files without letting the train and test
+    2D files overwrite each other: 2D keys get the split as suffix
+    (psnr_2d_test, psnr_2d_train); psnr_2d / ssim_2d are the TEST values,
+    which is what R2-Gaussian prints (train.py evaluates render_train, then
+    render_test, and prints the last one).
+
+    Ref: R2-Gaussian code, train.py training_report (validation_configs
+    order) at commit f2579bf. Added Oct 4 after the Step 0.1 stdout / yml
+    mismatch (49.55 vs 45.26 dB) turned out to be test vs train views.
+    """
+    out = {}
+    for name, text in files:
+        vals = parse_r2g_eval_yml(text)
+        split = None
+        if "render_test" in name:
+            split = "test"
+        elif "render_train" in name:
+            split = "train"
+        for k, v in vals.items():
+            out[f"{k}_{split}" if split and k.endswith("_2d") else k] = v
+    for k in ("psnr_2d", "ssim_2d"):
+        if f"{k}_test" in out:
+            out[k] = out[f"{k}_test"]
+    return out
