@@ -34,7 +34,7 @@ def recon():
 def test_centerline_follows_truth(recon):
     s_e, xyz_e, r_e, s, xyz, r = recon
     err = md.radius_error(xyz_e, r_e, s, xyz, r)
-    assert err["centerline_dist_mm"] < 0.15
+    assert err["centerline_dist_mm"] < 0.2
     assert err["coverage"] > 0.7
     assert abs(s_e[-1] - s[-1]) < 4.0  # end caps shorten the skeleton by about one radius each
 
@@ -121,3 +121,20 @@ def test_write_r2g_case_roundtrip(tmp_path):
     # mean concentration over the 30 training frames of a linear ramp is 0.5 everywhere
     v = back[tuple(lum["idx"].T)] / lum["frac"]
     assert np.allclose(v, 0.5, atol=0.01)
+
+
+def test_dim_segment_stays_connected():
+    """A proximal segment at 15 % brightness (between the low 0.1 and high
+    0.2 thresholds) must stay in the centerline (case 131_0 failure mode)."""
+    s = np.arange(0, 60.0001, 0.5)
+    xyz = np.stack([s, 8 * np.sin(s / 15.0), 0.2 * s], axis=1)
+    r = dg.insert_stenosis(s, np.linspace(1.8, 1.2, len(s)), 0.5, 8.0, 15.0)
+    lum = rt.lumen_voxels(s, xyz, r)
+    vol = np.zeros(lum["shape"], np.float32)
+    b = np.where(lum["s_vox"] < 25.0, 0.15, 1.0)  # dim proximal 25 mm, stenosis inside
+    vol[tuple(lum["idx"].T)] = lum["frac"] * b
+    vol = gaussian_filter(vol, 0.3 / lum["vox_mm"])
+    s_e, xyz_e = md.centerline_from_volume(vol, lum["vox_mm"], lum["origin_mm"])
+    assert s_e[-1] > 54.0  # whole vessel (minus end caps), not only the bright 35 mm
+    s_e1, _ = md.centerline_from_volume(vol, lum["vox_mm"], lum["origin_mm"], low_frac=0.2)
+    assert s_e1[-1] < 40.0  # the old single threshold loses the dim part

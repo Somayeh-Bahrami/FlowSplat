@@ -177,14 +177,16 @@ def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, run
         s_e, xyz_e, r_e = md.build_from_volume(_lv, _lum["vox_mm"], _lum["origin_mm"])
         s_e, xyz_e, r_e = md.orient_by_reference(s_e, xyz_e, r_e, _case["xyz_mm"][0])
         _err = md.radius_error(xyz_e, r_e, _case["s"], _case["xyz_mm"], _case["r_mm"])
+        _p = json.loads(str(_case["params"]))
+        _cov = md.coverage_metrics(xyz_e, r_e, _case["s"], _case["xyz_mm"], _p["stenosis_center_mm"],
+                                   _p["stenosis_len_mm"], _p["r_min_mm"])
         _tg = md.TubeGaussians(s_e, xyz_e, r_e)
         _ev = {}
         if _r["eval_dir"]:
             for _f in sorted(Path(_r["eval_dir"]).glob("eval*.yml")):
                 _ev[_f.stem] = {k: v for k, v in _yaml.safe_load(_f.read_text()).items() if isinstance(v, (int, float))}
-        _p = json.loads(str(_case["params"]))
         np.savez(f"{_r['base']}/geom_init.npz", s=s_e, xyz_mm=xyz_e, r_mm=r_e)
-        row = {"case": _c, "views": N_VIEWS, "init": INIT, **_err, "alignment_loss_init": float(_tg.alignment_loss().item()),
+        row = {"case": _c, "views": N_VIEWS, "init": INIT, **_err, **_cov, "alignment_loss_init": float(_tg.alignment_loss().item()),
                "n_gaussians": int(len(s_e)), "length_est_mm": float(s_e[-1]), "length_gt_mm": float(_case["s"][-1]),
                "stenosis_degree_gt": _p["stenosis_degree"], "r_min_gt_mm": _p["r_min_mm"],
                "r2g_eval": _ev, "minutes": _r["minutes"], "deviations": _r["deviations"],
@@ -194,8 +196,11 @@ def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, run
         _ax[0].imshow(_lv.max(axis=2).T, origin="lower", cmap="gray")
         _ax[0].set_title(f"{_c}: init volume ({INIT}), MIP")
         _ax[1].plot(_case["s"], _case["r_mm"], label="GT")
-        _ax[1].plot(s_e, r_e, label=f"estimate (MAE {_err['mae_mm']:.3f} mm)")
-        _ax[1].set_xlabel("s (mm)")
+        _ax[1].plot(md.matched_gt_s(xyz_e, _case["s"], _case["xyz_mm"]), r_e, ".", ms=2,
+                    label=f"estimate at matched GT s (MAE {_err['mae_mm']:.3f} mm, coverage {_cov['gt_coverage']:.0%})")
+        _ax[1].axvspan(_p["stenosis_center_mm"] - _p["stenosis_len_mm"] / 2,
+                       _p["stenosis_center_mm"] + _p["stenosis_len_mm"] / 2, color="0.9")
+        _ax[1].set_xlabel("GT s (mm)")
         _ax[1].set_ylabel("R (mm)")
         _ax[1].legend()
         _fig.tight_layout()
@@ -210,6 +215,9 @@ def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, run
         "mae_mm_per_case": {r["case"]: round(r["mae_mm"], 4) for r in rows},
         "mae_mm_mean": float(np.mean([r["mae_mm"] for r in rows])),
         "all_pass": all(r["pass"] for r in rows),
+        "gt_coverage_per_case": {r["case"]: round(r["gt_coverage"], 3) for r in rows},
+        "lesion_coverage_per_case": {r["case"]: round(r["lesion_coverage"], 3) for r in rows},
+        "throat_err_mm_per_case": {r["case"]: round(r["throat_err_mm"], 3) for r in rows},
         "rows": rows,
     }
     (_res / f"step2.1_geom_init_v{N_VIEWS}_{INIT}.json").write_text(json.dumps(summary, indent=2, default=str))

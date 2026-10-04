@@ -1,8 +1,8 @@
 # Step 2.1: Geometry initialisation and tube-aligned Gaussians
 
 Dates: Oct 12 to Oct 14, 2026 (started Oct 3). Status: **in progress**:
-plan route failed the DoD (run 1); fallback (FDK skeleton) implemented, run
-pending.
+plan route failed the DoD (run 1); fallback (FDK skeleton) meets the DoD as
+written (run 2) but missed one lesion; extraction fix pending run 3.
 
 Plan DoD: "Lumen radius error below 0.2 mm on 5 validation cases."
 
@@ -78,15 +78,43 @@ initialize directly from the ground-truth-free FDK volume skeleton."
 
 `FLOWSPLAT_INIT=fdk` (now the default): TIGRE FDK with a Hann filter (as
 the 4DRGS FDK baseline, Sec 4.1) of the same 60 views, then the same
-centerline and half-maximum radius. Run 2: TODO.
+centerline and half-maximum radius.
+
+### Run 2: FDK fallback, Oct 4, repo `866ab52`, 60 views
+
+`results/step2.1_geom_init_v60_fdk_run2.json`, figures
+`results/step2.1_<case>_v60_fdk_run2.png` (their right panel plots the
+estimate against its own arc length, which hides gaps; fixed for run 3).
+Coverage columns computed afterwards on the M4 from the saved
+`geom_init.npz` (2 mm tolerance).
+
+| Case | Radius MAE (mm) | Bias (mm) | GT coverage | Lesion coverage | Throat r est / GT (mm) | Pass (MAE) |
+|---|---|---|---|---|---|---|
+| 121_0 | 0.054 | -0.045 | 100 % | 100 % | 0.75 / 0.81 | yes |
+| 122_0 | 0.106 | -0.061 | 90 % | 100 % | 0.65 / 0.89 | yes |
+| 130_0 | 0.085 | -0.039 | 97 % | 100 % | 0.63 / 0.79 | yes |
+| 131_0 | 0.052 | -0.016 | **67 %** | **0 %** | (missing: nearest point 5.3 mm away) | yes |
+| 135_0 | 0.067 | -0.048 | 100 % | 100 % | 0.69 / 0.63 | yes |
+
+Mean radius MAE 0.073 mm; all 5 below 0.2 mm, so the DoD as written is
+met. But the MAE only scores points that were found: in 131_0 the FDK
+volume's dim proximal third (with the stenosis) was cut off by the single
+0.2 x p99.9 threshold, so the centerline starts after the lesion. That
+would give Step 2.2 a wrong inlet.
+
+Fix (part of the fallback's skeleton extraction, threshold choice OURS):
+hysteresis thresholding (seed 0.2, grow to 0.1 x p99.9). Synthetic test: a
+proximal segment at 15 % brightness is kept (old threshold: lost). The
+notebook now also reports GT coverage, lesion coverage and throat radius
+error. Run 3 (same FDK volumes, new extraction): TODO.
 
 ## DoD
 
 | DoD part | Met |
 |---|---|
-| Lumen radius error < 0.2 mm on 5 validation cases | TODO |
+| Lumen radius error < 0.2 mm on 5 validation cases | Run 2 (FDK fallback): yes, MAE 0.05 to 0.11 mm; coverage gap in 131_0, run 3 pending |
 
-**DoD met: no (in progress). Fallback used: yes (FDK volume skeleton), run pending.**
+**DoD met: as written yes (run 2); closing after run 3 confirms full coverage. Fallback used: yes (FDK volume skeleton).**
 
 Plan fallback (if Gaussians do not align with the vessel): "initialize
 directly from the ground-truth-free FDK volume skeleton."

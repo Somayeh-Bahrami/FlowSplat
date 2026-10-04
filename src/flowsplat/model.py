@@ -25,10 +25,14 @@ from scipy.sparse.csgraph import dijkstra
 from flowsplat import centerline as cl
 from flowsplat import data_gen as dg
 
-# OURS: foreground threshold for the skeleton, as a fraction of the 99.9th
-# percentile of the positive voxels (only used to find the centerline; the
-# radius does not depend on it).
+# OURS: hysteresis thresholds for the skeleton mask, as fractions of the
+# 99.9th percentile of the positive voxels: voxels above LOW_FRAC are kept
+# when connected to a voxel above THRESH_FRAC. A single threshold of 0.2 cut
+# off a dim proximal segment (with the stenosis) in case 131_0 of the FDK
+# run, Oct 4. Only used to find the centerline; the radius does not depend
+# on it.
 THRESH_FRAC = 0.2
+LOW_FRAC = 0.1
 # OURS: rays per cross-section and maximum search radius for the half maximum.
 N_RAYS = 16
 R_MAX_MM = 4.0
@@ -61,25 +65,32 @@ def longest_path(coords, iso_mm):
     return np.array(path[::-1])
 
 
-def centerline_from_volume(vol, vox_mm, origin_mm, thresh_frac=THRESH_FRAC):
-    """Threshold -> largest component -> skeleton -> longest path -> smooth.
+def centerline_from_volume(vol, vox_mm, origin_mm, thresh_frac=THRESH_FRAC, low_frac=LOW_FRAC):
+    """Hysteresis threshold -> largest component -> skeleton -> longest path -> smooth.
 
     Returns (s, xyz_mm) in the frame of `origin_mm`. Orientation (which end
     is the ostium) is not known from a static volume; `orient_by_reference`
     is used for evaluation only.
 
     Ref: skeleton reused from centerline.py (owner's code); smoothing and
-    resampling reused from data_gen.resample_and_smooth; threshold OURS.
+    resampling reused from data_gen.resample_and_smooth; hysteresis
+    thresholding as in Canny, IEEE TPAMI 1986 (applied to a volume; section
+    UNVERIFIED); thresholds OURS.
     """
     v = np.asarray(vol, dtype=float)
     pos = v[v > 0]
     if pos.size == 0:
         raise ValueError("empty volume")
-    mask = v > thresh_frac * np.percentile(pos, 99.9)
-    lab, n = cc_label(mask, structure=np.ones((3, 3, 3)))
+    ref = np.percentile(pos, 99.9)
+    lab, n = cc_label(v > low_frac * ref, structure=np.ones((3, 3, 3)))
     if n == 0:
         raise ValueError("no foreground")
-    mask = lab == (np.argmax(np.bincount(lab.ravel())[1:]) + 1)
+    seeded = np.unique(lab[v > thresh_frac * ref])
+    seeded = seeded[seeded > 0]
+    if len(seeded) == 0:
+        raise ValueError("no voxel above the high threshold")
+    sizes = np.bincount(lab.ravel())
+    mask = lab == seeded[np.argmax(sizes[seeded])]
     sk = cl.extract_centerline(mask, spacing=(vox_mm,) * 3)
     coords = sk[:, :3].astype(np.int64)
     path = longest_path(coords, vox_mm)
@@ -164,6 +175,37 @@ def radius_error(xyz_est, r_est, s_gt, xyz_gt, r_gt, trim_mm=5.0):
         "coverage": float(keep.mean()),
         "n": int(keep.sum()),
     }
+
+
+def coverage_metrics(xyz_est, r_est, s_gt, xyz_gt, lesion_center_mm, lesion_len_mm, r_min_gt_mm, tol_mm=2.0):
+    """How much of the GT vessel the estimate covers, and the throat radius.
+
+    gt_coverage: share of GT centerline points within tol_mm of the estimate;
+    lesion_coverage: the same inside the lesion window; throat: estimated
+    radius at the estimate point nearest the GT throat, its error and that
+    point's distance. Added after run 2 (Oct 4): the radius MAE alone did not
+    see that case 131_0 missed its proximal third with the stenosis.
+    Ref: OURS (evaluation only).
+    """
+    from scipy.spatial import cKDTree
+
+    d, j = cKDTree(xyz_est).query(xyz_gt)
+    lesion = np.abs(s_gt - lesion_center_mm) <= lesion_len_mm / 2
+    k = int(np.argmin(np.abs(s_gt - lesion_center_mm)))
+    return {
+        "gt_coverage": float((d < tol_mm).mean()),
+        "lesion_coverage": float((d[lesion] < tol_mm).mean()),
+        "throat_r_est_mm": float(r_est[j[k]]),
+        "throat_err_mm": float(r_est[j[k]] - r_min_gt_mm),
+        "throat_dist_mm": float(d[k]),
+    }
+
+
+def matched_gt_s(xyz_est, s_gt, xyz_gt):
+    """GT arc length of the nearest GT point for each estimate point (for plots). Ref: OURS."""
+    from scipy.spatial import cKDTree
+
+    return s_gt[cKDTree(xyz_gt).query(xyz_est)[1]]
 
 
 # ============================ tube-aligned Gaussians ============================
