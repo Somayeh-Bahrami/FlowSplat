@@ -214,7 +214,10 @@ Not part of the DoD:
    failed. Log (attempt 3, Oct 4, `7abd757`): `CMake was unable to find a
    build program corresponding to "Unix Makefiles"` (no `make` in the molab
    image). Fix: CMAKE_GENERATOR=Ninja plus explicit CC / CXX / CUDAHOSTCXX
-   (environment only); attempt 4 pending.
+   (environment only). Attempt 4 (`903b45c`): LEAP compiled and linked
+   (deprecation warnings only); `manual_install.py` stopped because the user
+   site-packages folder does not exist. Fix: create it before the script;
+   attempt 5 pending.
 
 ## Not verified
 

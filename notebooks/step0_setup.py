@@ -950,6 +950,9 @@ def _(
                                    "instead_of": "plain `sh ./etc/build.sh` (Unix Makefiles) from the 4DRGS README",
                                    "reason": "No `make` in the molab image. Environment only; LEAP source untouched."})
                 _sh.copy(LEAP_DIR / "build" / "lib" / "libleapct.so", LEAP_DIR / "libleapct.so")
+                # manual_install.py copies into site.getusersitepackages(), which
+                # does not exist on molab (FileNotFoundError, Oct 4): create it.
+                sh([sys.executable, "-c", "import os, site; os.makedirs(site.getusersitepackages(), exist_ok=True)"])
                 sh([sys.executable, "manual_install.py"], cwd=LEAP_DIR)
                 if not _leap_ok():
                     # manual_install.py copies to the user site-packages, which a
