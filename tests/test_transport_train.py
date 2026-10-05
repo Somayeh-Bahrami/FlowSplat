@@ -169,3 +169,15 @@ def test_variants_keep_radius_frozen():
                               q_init=330.0, log=lambda *a: None, variant=v)
         assert np.allclose(m.tube.radius().detach().numpy(), r + 0.1, atol=1e-4), v
         assert info["variant"] == v
+
+
+def test_tau_uses_fixed_arc_length_not_moving_centres():
+    """Regression (Oct 5): zig-zagging the centres must not change tau when
+    the arc-length labels s_i are given (plan: Gaussians sit at s_i)."""
+    trn = Transport(q_mm3s=500.0)
+    s = torch.linspace(0, 20, 41)
+    straight = torch.stack([torch.zeros(41), s, torch.zeros(41)], 1)
+    zigzag = straight + torch.stack([0.8 * (torch.arange(41) % 2), torch.zeros(41), torch.zeros(41)], 1)
+    area = torch.full((41,), 7.0)
+    assert torch.allclose(trn.tau(zigzag, area, s), trn.tau(straight, area, s))
+    assert float(trn.tau(zigzag, area)[-1]) > 1.5 * float(trn.tau(straight, area)[-1])  # old behaviour

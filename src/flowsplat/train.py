@@ -95,7 +95,7 @@ class CaseModel:
 
     def render(self, projector, thetas, times):
         tg = self.tube
-        rho = self.transport.density(tg.position, tg.area(), tg.sigma_a(), times)
+        rho = self.transport.density(tg.position, tg.area(), tg.sigma_a(), times, tg.s)
         return projector.render(tg.position, tg.covariance(), rho, thetas)
 
     def estimates(self):
@@ -125,7 +125,7 @@ def _fit_k(model, projector, proj, thetas, times, cache=None):
     with torch.no_grad():
         if cache is not None:
             tg = model.tube
-            rho = model.transport.density(tg.position, tg.area(), tg.sigma_a(), times)
+            rho = model.transport.density(tg.position, tg.area(), tg.sigma_a(), times, tg.s)
             pred = torch.einsum("vn,vnp->vp", rho, cache).reshape(proj.shape)
         else:
             pred = model.render(projector, thetas, times)
@@ -179,7 +179,7 @@ def _run(model, projector, proj, thetas, times, params, iters, align=0.0, log_ev
     for it in range(iters):
         opt.zero_grad()
         if cache is not None:
-            rho = model.transport.density(tg.position.detach(), tg.area().detach(), tg.sigma_a().detach(), times)
+            rho = model.transport.density(tg.position.detach(), tg.area().detach(), tg.sigma_a().detach(), times, tg.s)
             pred = torch.einsum("vn,vnp->vp", rho, cache).reshape(proj.shape)
             target = proj
         elif views_per_iter and views_per_iter < n_v:
@@ -191,7 +191,7 @@ def _run(model, projector, proj, thetas, times, params, iters, align=0.0, log_ev
             target = proj
         loss, l1 = image_loss(pred, target, dr)
         if arrival is not None:
-            arr = model.transport.arrival(tg.position, tg.area())
+            arr = model.transport.arrival(tg.position, tg.area(), tg.s)
             vmask = arrival["valid"]
             loss = loss + LAMBDA_ARRIVAL * F.smooth_l1_loss(arr[vmask], arrival["target"][vmask], beta=0.05)
         if align > 0:
@@ -237,7 +237,7 @@ def fit_case(proj, thetas, times, s, xyz_world, radius, projector, device="cpu",
     arrival = None
     if variant == "pose_arr":
         with torch.no_grad():
-            rho_full = m.transport.density_full(m.tube.position, m.tube.sigma_a())
+            rho_full = m.transport.density_full(m.tube.position, m.tube.sigma_a(), m.tube.s)
         tgt, valid = measure_arrival(proj, m.cache, rho_full, times)
         arrival = {"target": tgt, "valid": valid}
         log(f"arrival targets: {int(valid.sum())} of {len(valid)} Gaussians usable")

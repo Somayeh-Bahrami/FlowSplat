@@ -81,30 +81,41 @@ class Transport(torch.nn.Module):
         return gamma_variate(t, self.t0, self.log_alpha.exp(), self.log_beta.exp())
 
     @staticmethod
-    def segment_lengths(positions):
-        """|p_{i+1} - p_i| for a chain of centres (N-1,)."""
+    def segment_lengths(positions, s=None):
+        """Arc-length steps between neighbouring Gaussians (N-1,).
+
+        With `s` (the arc length assigned to each Gaussian at initialisation)
+        the steps are |s_{i+1} - s_i| and do not change when positions move.
+        Plan, Approach: each Gaussian "sits at arc length s_i along its
+        branch". Measuring the steps from the moving centres (the first
+        implementation) let the chain zig-zag in Stage B: chain length 174 ->
+        449 mm on case 130_0, Q x 2.5 at constant transit time (Oct 5).
+        """
+        if s is not None:
+            return (s[1:] - s[:-1]).abs()
         return (positions[1:] - positions[:-1]).norm(dim=1)
 
-    def tau(self, positions, area):
+    def tau(self, positions, area, s=None):
         """Plug-flow arrival time of every Gaussian, tau_0 = 0 at the inlet.
 
-        tau_i = sum_{k<i} 0.5 (A_k + A_{k+1}) |p_{k+1} - p_k| / Q.
+        tau_i = sum_{k<i} 0.5 (A_k + A_{k+1}) ds_k / Q, ds from the fixed arc
+        lengths s when given.
         """
-        ds = self.segment_lengths(positions)
+        ds = self.segment_lengths(positions, s)
         vol = 0.5 * (area[1:] + area[:-1]) * ds
         return torch.cat([vol.new_zeros(1), torch.cumsum(vol, 0)]) / self.q()
 
-    def arrival(self, positions, area):
+    def arrival(self, positions, area, s=None):
         """Model half-rise arrival time of every Gaussian, t0 + tau_i + alpha beta x_h (s)."""
         alpha, beta = self.log_alpha.exp(), self.log_beta.exp()
-        return self.t0 + self.tau(positions, area) + alpha * beta * half_rise_x(alpha)
+        return self.t0 + self.tau(positions, area, s) + alpha * beta * half_rise_x(alpha)
 
-    def concentration(self, positions, area, t):
+    def concentration(self, positions, area, t, s=None):
         """c_i(t_j) = C_in(t_j - tau_i), shape (T, N)."""
-        tau = self.tau(positions, area)
+        tau = self.tau(positions, area, s)
         return self.inlet(t[:, None] - tau[None, :])
 
-    def density(self, positions, area, sigma_axial, t):
+    def density(self, positions, area, sigma_axial, t, s=None):
         """Peak density of each Gaussian at each time, shape (T, N), in 1/mm.
 
         rho_i(t) = k c_i(t) ds_i / (sqrt(2 pi) sigma_a,i): with this factor a
@@ -113,13 +124,13 @@ class Transport(torch.nn.Module):
         A = 2 pi sigma_r^2 filled with attenuation k c (plan's mass matching
         mu_0 2 pi sigma^2 = mu_0 pi R^2). Ref: OURS (normalisation).
         """
-        ds = self.segment_lengths(positions)
+        ds = self.segment_lengths(positions, s)
         ds_node = torch.cat([ds[:1], 0.5 * (ds[1:] + ds[:-1]), ds[-1:]])
-        c = self.concentration(positions, area, t)
+        c = self.concentration(positions, area, t, s)
         return self.log_k.exp() * c * (ds_node / (math.sqrt(2 * math.pi) * sigma_axial))[None, :]
 
-    def density_full(self, positions, sigma_axial):
+    def density_full(self, positions, sigma_axial, s=None):
         """Peak densities at full concentration (c = 1), shape (N,)."""
-        ds = self.segment_lengths(positions)
+        ds = self.segment_lengths(positions, s)
         ds_node = torch.cat([ds[:1], 0.5 * (ds[1:] + ds[:-1]), ds[-1:]])
         return self.log_k.exp() * ds_node / (math.sqrt(2 * math.pi) * sigma_axial)

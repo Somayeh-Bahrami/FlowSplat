@@ -85,7 +85,38 @@ Q converges; the second clause applies. Realised as variants
 (pose + arrival-time loss: arrival at each Gaussian measured from the data
 as the half-peak time of its normalised time-intensity curve, compared with
 t0 + tau_i + the inlet half-rise time). Compared on the first case of each
-of the 5 validation patients before the 20-case run: TODO.
+of the 5 validation patients before the 20-case run.
+
+### Run 2: variants on 5 validation cases, Oct 5, repo `4ffd92b`
+
+`results/step2.2_variants5_v60_run2_bug_moving_arc.json`.
+
+| Variant | Mean Q error | Stage A Q error | Mean diameter error | Radius MAE |
+|---|---|---|---|---|
+| base | 123 % | 3.9 % | 0.82 mm | 0.47 mm |
+| frozen | **3.8 %** (5 of 5 below 10 %) | 3.8 % | 0.36 mm (2 of 4 below 0.2; 131_0 lesion missing) | 0.07 mm |
+| pose | 143 % | 3.9 % | 0.65 mm | 0.09 mm |
+| pose_arr | 129 % | 4.3 % | 0.71 mm | 0.09 mm |
+
+Stage A is good on all 5 cases (0.4 to 6.1 %). Every variant that moves
+positions in Stage B ruined Q. Diagnosis (bug in our discretisation): tau
+and the density weights used distances between the moving Gaussian
+centres; in Stage B the chain zig-zagged at no image cost (overlapping
+Gaussians), its length grew 174 -> 449 mm (130_0, pose), and Q grew by the
+same factor at a constant transit time. Fix (plan-consistent: Gaussians sit
+at fixed arc lengths s_i): tau and the weights use the s_i assigned at
+initialisation (regression test added).
+
+M4 check after the fix (121_0, detector binned 2 x 2, 300 Stage B
+iterations): pose: Q error 4.5 % (Stage A 6.1 %), Q stable during Stage B
+(1155 -> 1162 mm^3/s), chain 164 mm, diameter error 0.071 mm, radius MAE
+0.068 mm. base: Q error 28 %, radius MAE 0.26 mm: with the radius free the
+Gaussian-profile bias remains (separate from the bug).
+
+Pre-specified before the 20-case run: primary variant **pose_arr** (both
+parts of the fallback: geometry radius kept frozen, positions refined,
+arrival-time loss); frozen and pose reported as ablations; base reported as
+the failed plan route.
 
 ## DoD
 
