@@ -1,0 +1,46 @@
+{
+  "timestamp_utc": "2026-10-05T22:13:39Z",
+  "mode": "overfit",
+  "views": 60,
+  "n_cases": 1,
+  "q_rel_err": {
+    "mean": 0.04444507009883393,
+    "median": 0.04444507009883393,
+    "max": 0.04444507009883393,
+    "frac_below_10pct": 1.0
+  },
+  "q_rel_err_stage_a_only": {
+    "mean": 0.06142784044865053,
+    "median": 0.06142784044865053
+  },
+  "diam_err_mm": {
+    "mean": 0.2837384464842303,
+    "median": 0.2837384464842303,
+    "frac_below_0p2": 0.0,
+    "n_lesion_found": 1
+  },
+  "dod_rule": "mean Q relative error < 10 % and mean stenosis diameter error < 0.2 mm over the cases (per-case fractions reported too)",
+  "dod_met": false,
+  "cases": {
+    "121_0": {
+      "q_est_mls": 1.2719105224609375,
+      "q_gt_mls": 1.2177859409500387,
+      "q_rel_err": 0.04444507009883393,
+      "lesion_found": true,
+      "r_min_gt_mm": 0.8109820843985788,
+      "stenosis_degree_gt": 0.44482901253078855,
+      "centerline_dist_mm": 0.457224237358628,
+      "radius_mae_mm": 0.3787318578203912,
+      "r_min_est_mm": 0.6691128611564636,
+      "diam_err_mm": 0.2837384464842303,
+      "q_rel_err_stage_a": 0.06142784044865053,
+      "direction": -1,
+      "minutes": 1.84,
+      "q_mm3s": 1271.9105224609375,
+      "t0_s": 0.35131287574768066,
+      "alpha": 2.7156214714050293,
+      "beta_s": 0.3177069425582886,
+      "k_per_mm": 0.11017362028360367
+    }
+  }
+}

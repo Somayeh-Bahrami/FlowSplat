@@ -34,6 +34,17 @@ ITERS_DIRECTION = 150
 ITERS_A = 600
 ITERS_B = 1500
 LAMBDA_ALIGN = 0.1
+# Plan Step 2.2 fallback ("Geometry/flow ambiguity: keep geometry frozen
+# longer, add arrival-time loss"), applied after the 121_0 overfit run of
+# Oct 5 (Stage B shrank the radius by about 0.3 mm everywhere; stenosis
+# diameter error 0.28 mm). Variants (OURS realisations of the fallback):
+#   base     Stage A, then Stage B on all geometry (plan route)
+#   frozen   geometry frozen for the whole budget (Stage A gets iters_b too)
+#   pose     Stage B on positions and rotations only, radius frozen
+#   pose_arr pose + arrival-time loss (in Stage A and B)
+VARIANTS = ("base", "frozen", "pose", "pose_arr")
+LAMBDA_ARRIVAL = 0.05  # OURS: 0.05 s arrival error ~ 0.0025, comparable to the image loss (~0.006)
+ARRIVAL_MIN_PEAK = 0.3  # OURS: Gaussians whose normalised curve never reaches 0.3 are not used
 # OURS: views rendered per Stage B iteration (random subset, as 3DGS samples
 # one view per step); all views at once would need about 60 GB on the GPU.
 VIEWS_PER_ITER = 8
@@ -122,8 +133,41 @@ def _fit_k(model, projector, proj, thetas, times, cache=None):
         model.transport.log_k.add_(math.log(max(ratio, 1e-6)))
 
 
+def measure_arrival(proj, cache, rho_full, times):
+    """Arrival time of the bolus at every Gaussian, measured from the data.
+
+    For Gaussian i and view j the pixel is the peak of i's footprint; the data
+    value there is divided by the model value at full concentration (all
+    Gaussians at c = 1), which removes the angle-dependent path length. The
+    arrival is the first time this normalised curve reaches half of its own
+    maximum (linear interpolation). Returns (arrival (N,), valid (N,) bool).
+    Ref: OURS (time-to-half-peak, an indicator-dilution style arrival time),
+    for the plan's fallback "add arrival-time loss".
+    """
+    v, n, p = cache.shape
+    pix = cache.argmax(dim=2)  # (V, N)
+    full = torch.einsum("n,vnp->vp", rho_full, cache)  # (V, P)
+    data = proj.reshape(v, p)
+    f_at = torch.gather(full, 1, pix)  # (V, N)
+    d_at = torch.gather(data, 1, pix)
+    norm = (d_at / f_at.clamp_min(1e-9)).clamp_min(0)  # (V, N), times ascending
+    peak = norm.max(dim=0).values
+    valid = peak > ARRIVAL_MIN_PEAK
+    half = 0.5 * peak
+    above = norm >= half[None]
+    first = above.float().argmax(dim=0)  # first view index at or above half
+    prev = (first - 1).clamp_min(0)
+    y0 = norm[prev, torch.arange(n)]
+    y1 = norm[first, torch.arange(n)]
+    t0, t1 = times[prev], times[first]
+    frac = ((half - y0) / (y1 - y0).clamp_min(1e-9)).clamp(0, 1)
+    arr = torch.where(first > 0, t0 + frac * (t1 - t0), times[first])
+    valid = valid & (first > 0)
+    return arr.detach(), valid
+
+
 def _run(model, projector, proj, thetas, times, params, iters, align=0.0, log_every=50, tag="", cache=None,
-         views_per_iter=None, seed=0):
+         views_per_iter=None, seed=0, arrival=None):
     """Adam on `params`. With `cache` (footprints of frozen geometry, Stage A)
     each image is a matrix product of densities and cached footprints."""
     opt = torch.optim.Adam(params)
@@ -146,6 +190,10 @@ def _run(model, projector, proj, thetas, times, params, iters, align=0.0, log_ev
             pred = model.render(projector, thetas, times)
             target = proj
         loss, l1 = image_loss(pred, target, dr)
+        if arrival is not None:
+            arr = model.transport.arrival(tg.position, tg.area())
+            vmask = arrival["valid"]
+            loss = loss + LAMBDA_ARRIVAL * F.smooth_l1_loss(arr[vmask], arrival["target"][vmask], beta=0.05)
         if align > 0:
             loss = loss + align * model.tube.alignment_loss()
         loss.backward()
@@ -157,7 +205,7 @@ def _run(model, projector, proj, thetas, times, params, iters, align=0.0, log_ev
 
 
 def fit_case(proj, thetas, times, s, xyz_world, radius, projector, device="cpu",
-             iters_dir=ITERS_DIRECTION, iters_a=ITERS_A, iters_b=ITERS_B, q_init=None, log=print):
+             iters_dir=ITERS_DIRECTION, iters_a=ITERS_A, iters_b=ITERS_B, q_init=None, log=print, variant="base"):
     """Fit one case. proj: (V, nv, nu) training projections (torch), thetas
     (rad) and times (s) of these views; (s, xyz_world, radius): initial tube
     (Step 2.1 FDK skeleton). The inlet end is unknown, so a short Stage A is
@@ -184,9 +232,20 @@ def fit_case(proj, thetas, times, s, xyz_world, radius, projector, device="cpu",
         if best is None or h[-1]["loss"] < best[1][-1]["loss"]:
             best = (m, h, direction)
     m, hist, direction = best
+    if variant not in VARIANTS:
+        raise ValueError(f"unknown variant {variant}")
+    arrival = None
+    if variant == "pose_arr":
+        with torch.no_grad():
+            rho_full = m.transport.density_full(m.tube.position, m.tube.sigma_a())
+        tgt, valid = measure_arrival(proj, m.cache, rho_full, times)
+        arrival = {"target": tgt, "valid": valid}
+        log(f"arrival targets: {int(valid.sum())} of {len(valid)} Gaussians usable")
+    if variant == "frozen":
+        iters_a, iters_b = iters_a + iters_b, 0
     # Stage A: geometry frozen, fit Q and C_in (plan).
     hist += _run(m, projector, proj, thetas, times, [{"params": list(m.transport.parameters()), "lr": LR_TRANSPORT}],
-                 iters_a, tag="A", cache=m.cache)
+                 iters_a, tag="A", cache=m.cache, arrival=arrival)
     m.cache = None  # free the footprints before Stage B
     q_after_a = float(m.transport.q().detach())
     log(f"Stage A: Q {q_after_a:.1f} mm3/s, loss {hist[-1]['loss']:.5f}")
@@ -195,13 +254,15 @@ def fit_case(proj, thetas, times, s, xyz_world, radius, projector, device="cpu",
     groups = [
         {"params": list(m.transport.parameters()), "lr": LR_TRANSPORT / 3},
         {"params": [tg.position], "lr": LR_POSITION_MM},
-        {"params": [tg.raw_sigma_r], "lr": LR_SCALE},
         {"params": [tg.quat], "lr": LR_ROTATION},
     ]
-    hist += _run(m, projector, proj, thetas, times, groups, iters_b, align=LAMBDA_ALIGN, tag="B",
-                 views_per_iter=VIEWS_PER_ITER)
+    if variant == "base":
+        groups.append({"params": [tg.raw_sigma_r], "lr": LR_SCALE})
+    if iters_b > 0:
+        hist += _run(m, projector, proj, thetas, times, groups, iters_b, align=LAMBDA_ALIGN, tag="B",
+                     views_per_iter=VIEWS_PER_ITER, arrival=arrival)
     log(f"Stage B: Q {float(m.transport.q().detach()):.1f} mm3/s, loss {hist[-1]['loss']:.5f}")
-    return m, {"history": hist, "direction": direction, "q_after_stage_a": q_after_a,
+    return m, {"history": hist, "direction": direction, "q_after_stage_a": q_after_a, "variant": variant,
                "minutes": round((time.time() - t0) / 60, 2)}
 
 

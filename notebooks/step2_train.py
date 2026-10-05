@@ -16,6 +16,8 @@
 # Run from the repo root:  python notebooks/step2_train.py
 # FLOWSPLAT_MODE = overfit (one case, default) | val20 (20 validation cases)
 # FLOWSPLAT_VIEWS = 60 (default) | 30;  FLOWSPLAT_CASES = comma list (overrides)
+# FLOWSPLAT_VARIANTS = comma list of base, frozen, pose, pose_arr (default: all;
+#   the Step 2.2 fallback variants, see train.VARIANTS)
 
 import marimo
 
@@ -58,10 +60,12 @@ def _(Path, mo, os, sys):
     RENDER = WORK / "data" / "render_v1"
     OUT = WORK / "step2_2"
     MODE = os.environ.get("FLOWSPLAT_MODE", "overfit")
+    # Fallback variants of the plan (train.VARIANTS); overfit runs all four.
+    VARIANTS = tuple(os.environ.get("FLOWSPLAT_VARIANTS", ",".join(tr.VARIANTS)).split(","))
     N_VIEWS = int(os.environ.get("FLOWSPLAT_VIEWS", "60"))
     DOD_Q, DOD_DIAM_MM = 0.10, 0.2  # plan, Step 2.2 DoD
-    print("mode:", MODE, "| views:", N_VIEWS)
-    return DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, md, rt, tr
+    print("mode:", MODE, "| views:", N_VIEWS, "| variants:", VARIANTS)
+    return DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, VARIANTS, md, rt, tr
 
 
 @app.cell
@@ -115,14 +119,13 @@ def _(DATA, MODE, PACK, RENDER, json, np, os, rt, tigre_ready, zipfile):
 
 
 @app.cell
-def _(CASES, DATA, N_VIEWS, OUT, RENDER, json, md, np, rt, time, tr):
-    # c) fit every case
+def _(CASES, DATA, N_VIEWS, OUT, RENDER, VARIANTS, json, md, np, rt, time, tr):
+    # c) fit every case with every requested variant (same FDK init per case)
     import torch
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     results = {}
     for _c in CASES:
-        _t0 = time.time()
         _z = np.load(RENDER / f"{_c}.npz")
         _meta = json.loads(str(_z["meta"]))
         _case = np.load(DATA / "cases" / f"{_c}.npz")
@@ -134,26 +137,29 @@ def _(CASES, DATA, N_VIEWS, OUT, RENDER, json, md, np, rt, time, tr):
         _proj = torch.tensor(_z["proj"][_idx].astype(np.float32), device=device)
         _pj = md.ConeProjector(_meta["geometry"], device=device)
         _thetas = list(np.deg2rad(_z["angles_deg"][_idx]))
-        _m, _info = tr.fit_case(_proj, _thetas, _z["t_s"][_idx], _s, _world, _r, _pj, device=device,
-                                log=lambda *a: print(_c, *a, flush=True))
-        _est = _m.estimates()
-        _ev = tr.evaluate(_est, _case, _meta["lumen"], _meta["axis_perm"])
-        # Stage-A-only evaluation for the ablation (geometry = init)
-        _ev["q_rel_err_stage_a"] = abs(_info["q_after_stage_a"] / 1000 - _ev["q_gt_mls"]) / _ev["q_gt_mls"]
-        _d = OUT / f"{_c}_v{N_VIEWS}"
-        _d.mkdir(parents=True, exist_ok=True)
-        np.savez(_d / "estimate.npz", radius_mm=_est["radius_mm"], position_world_mm=_est["position_world_mm"],
-                 init_s=_s, init_xyz_lumen=_xyz_l, init_r=_r)
-        (_d / "history.json").write_text(json.dumps(_info["history"]))
-        results[_c] = {**_ev, "direction": _info["direction"], "minutes": round((time.time() - _t0) / 60, 2),
-                       **{k: v for k, v in _est.items() if k not in ("radius_mm", "position_world_mm")}}
-        print(_c, json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in results[_c].items()}), flush=True)
+        for _v in VARIANTS:
+            _t0 = time.time()
+            torch.manual_seed(0)
+            _m, _info = tr.fit_case(_proj, _thetas, _z["t_s"][_idx], _s, _world, _r, _pj, device=device,
+                                    variant=_v, log=lambda *a: print(_c, _v, *a, flush=True))
+            _est = _m.estimates()
+            _ev = tr.evaluate(_est, _case, _meta["lumen"], _meta["axis_perm"])
+            _ev["q_rel_err_stage_a"] = abs(_info["q_after_stage_a"] / 1000 - _ev["q_gt_mls"]) / _ev["q_gt_mls"]
+            _d = OUT / f"{_c}_v{N_VIEWS}_{_v}"
+            _d.mkdir(parents=True, exist_ok=True)
+            np.savez(_d / "estimate.npz", radius_mm=_est["radius_mm"], position_world_mm=_est["position_world_mm"],
+                     init_s=_s, init_xyz_lumen=_xyz_l, init_r=_r)
+            (_d / "history.json").write_text(json.dumps(_info["history"]))
+            results[f"{_c}|{_v}"] = {**_ev, "case": _c, "variant": _v, "direction": _info["direction"],
+                                     "minutes": round((time.time() - _t0) / 60, 2),
+                                     **{k: v for k, v in _est.items() if k not in ("radius_mm", "position_world_mm")}}
+            print(_c, _v, json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in results[f"{_c}|{_v}"].items()}), flush=True)
     return (results,)
 
 
 @app.cell
-def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, RENDER, json, md, np, results, time):
-    # d) summary and figures
+def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, RENDER, VARIANTS, json, md, np, results, time):
+    # d) summary per variant and figures per case (all variants in one plot)
     import matplotlib as _mpl
 
     _mpl.use("Agg")
@@ -162,40 +168,54 @@ def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, RENDER, json,
 
     _res = FLOWSPLAT_DIR / "results"
     _res.mkdir(exist_ok=True)
-    _q = np.array([r["q_rel_err"] for r in results.values()])
-    _qa = np.array([r["q_rel_err_stage_a"] for r in results.values()])
-    _dm = np.array([r["diam_err_mm"] for r in results.values() if r["diam_err_mm"] is not None])
+    per_variant = {}
+    for _v in VARIANTS:
+        _rows = [r for r in results.values() if r["variant"] == _v]
+        _q = np.array([r["q_rel_err"] for r in _rows])
+        _qa = np.array([r["q_rel_err_stage_a"] for r in _rows])
+        _dm = np.array([r["diam_err_mm"] for r in _rows if r["diam_err_mm"] is not None])
+        per_variant[_v] = {
+            "n_cases": len(_rows),
+            "q_rel_err": {"mean": float(_q.mean()), "median": float(np.median(_q)), "max": float(_q.max()),
+                          "frac_below_10pct": float((_q < DOD_Q).mean())},
+            "q_rel_err_stage_a_only": {"mean": float(_qa.mean()), "median": float(np.median(_qa))},
+            "diam_err_mm": {"mean": float(_dm.mean()) if len(_dm) else None,
+                            "median": float(np.median(_dm)) if len(_dm) else None,
+                            "frac_below_0p2": float((_dm < DOD_DIAM_MM).mean()) if len(_dm) else None,
+                            "n_lesion_found": int(len(_dm))},
+            "radius_mae_mm_mean": float(np.nanmean([r["radius_mae_mm"] for r in _rows])),
+            "dod_met": bool(_q.mean() < DOD_Q and len(_dm) == len(_rows) and _dm.mean() < DOD_DIAM_MM),
+        }
     summary = {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "mode": MODE, "views": N_VIEWS, "n_cases": len(results),
-        "q_rel_err": {"mean": float(_q.mean()), "median": float(np.median(_q)), "max": float(_q.max()),
-                      "frac_below_10pct": float((_q < DOD_Q).mean())},
-        "q_rel_err_stage_a_only": {"mean": float(_qa.mean()), "median": float(np.median(_qa))},
-        "diam_err_mm": {"mean": float(_dm.mean()) if len(_dm) else None, "median": float(np.median(_dm)) if len(_dm) else None,
-                        "frac_below_0p2": float((_dm < DOD_DIAM_MM).mean()) if len(_dm) else None,
-                        "n_lesion_found": int(len(_dm))},
+        "mode": MODE, "views": N_VIEWS, "variants": list(VARIANTS),
         "dod_rule": "mean Q relative error < 10 % and mean stenosis diameter error < 0.2 mm over the cases (per-case fractions reported too)",
-        "dod_met": bool(_q.mean() < DOD_Q and len(_dm) == len(results) and _dm.mean() < DOD_DIAM_MM),
+        "per_variant": per_variant,
         "cases": results,
     }
     (_res / f"step2.2_{MODE}_v{N_VIEWS}.json").write_text(json.dumps(summary, indent=2, default=str))
-    for _c, _r in results.items():
-        _e = np.load(OUT / f"{_c}_v{N_VIEWS}" / "estimate.npz")
+    for _c in sorted({r["case"] for r in results.values()}):
         _meta = json.loads(str(np.load(RENDER / f"{_c}.npz")["meta"]))
         _case = np.load(DATA / "cases" / f"{_c}.npz")
         _p = json.loads(str(_case["params"]))
-        _xyz = md.world_to_lumen(_e["position_world_mm"], _meta["lumen"], _meta["axis_perm"])
-        _j = _kd(_case["xyz_mm"]).query(_xyz)[1]
-        _ji = _kd(_case["xyz_mm"]).query(_e["init_xyz_lumen"])[1]
-        _fig, _ax = _plt.subplots(figsize=(9, 3.6))
-        _ax.plot(_case["s"], _case["r_mm"], label="ground truth")
-        _ax.plot(_case["s"][_ji], _e["init_r"], ".", ms=2, label="init (FDK)")
-        _ax.plot(_case["s"][_j], _e["radius_mm"], ".", ms=3, label="Stage B")
-        _ax.axvspan(_p["stenosis_center_mm"] - _p["stenosis_len_mm"] / 2, _p["stenosis_center_mm"] + _p["stenosis_len_mm"] / 2, color="0.9")
+        _tree = _kd(_case["xyz_mm"])
+        _fig, _ax = _plt.subplots(figsize=(10, 4))
+        _ax.plot(_case["s"], _case["r_mm"], color="k", lw=1.5, label="ground truth")
+        _first = True
+        for _v in VARIANTS:
+            _e = np.load(OUT / f"{_c}_v{N_VIEWS}_{_v}" / "estimate.npz")
+            if _first:
+                _ax.plot(_case["s"][_tree.query(_e["init_xyz_lumen"])[1]], _e["init_r"], ".", ms=2, color="0.6", label="init (FDK)")
+                _first = False
+            _xyz = md.world_to_lumen(_e["position_world_mm"], _meta["lumen"], _meta["axis_perm"])
+            _r = results[f"{_c}|{_v}"]
+            _ax.plot(_case["s"][_tree.query(_xyz)[1]], _e["radius_mm"], ".", ms=2,
+                     label=f"{_v}: Q {_r['q_rel_err']:.1%}, diam {_r['diam_err_mm'] if _r['diam_err_mm'] is None else round(_r['diam_err_mm'], 3)} mm")
+        _ax.axvspan(_p["stenosis_center_mm"] - _p["stenosis_len_mm"] / 2, _p["stenosis_center_mm"] + _p["stenosis_len_mm"] / 2, color="0.92")
         _ax.set_xlabel("GT s (mm)")
         _ax.set_ylabel("R (mm)")
-        _ax.set_title(f"{_c}: Q err {_r['q_rel_err']:.1%}, diam err {_r['diam_err_mm'] if _r['diam_err_mm'] is None else round(_r['diam_err_mm'], 3)} mm")
-        _ax.legend()
+        _ax.set_title(_c)
+        _ax.legend(fontsize=8)
         _fig.tight_layout()
         _fig.savefig(_res / f"step2.2_{_c}_v{N_VIEWS}.png", dpi=80)
         _plt.close(_fig)

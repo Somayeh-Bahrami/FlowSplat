@@ -33,6 +33,27 @@ def gamma_variate(t, t0, alpha, beta):
     return torch.where(pos, val, torch.zeros_like(val))
 
 
+def half_rise_x(alpha):
+    """x_h in (0, 1) with gamma-variate value 0.5 on the rising edge, i.e.
+    alpha (ln x + 1 - x) = ln 0.5; the half-rise time is t0 + alpha beta x_h.
+    Solved by bisection on the detached alpha; gradient by the implicit
+    function theorem, dx/dalpha = -(ln x + 1 - x) / (alpha (1/x - 1)).
+    Ref: OURS (for the arrival-time loss of the Step 2.2 fallback).
+    """
+    a = alpha.detach()
+    lo = torch.full_like(a, 1e-9)
+    hi = torch.ones_like(a)
+    target = math.log(0.5)
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        g = a * (torch.log(mid) + 1.0 - mid)
+        lo = torch.where(g < target, mid, lo)
+        hi = torch.where(g < target, hi, mid)
+    x = 0.5 * (lo + hi)
+    dxda = -(torch.log(x) + 1.0 - x) / (a * (1.0 / x - 1.0))
+    return x + (alpha - a) * dxda
+
+
 class Transport(torch.nn.Module):
     """Q, inlet curve and the plug-flow concentration of every Gaussian.
 
@@ -73,6 +94,11 @@ class Transport(torch.nn.Module):
         vol = 0.5 * (area[1:] + area[:-1]) * ds
         return torch.cat([vol.new_zeros(1), torch.cumsum(vol, 0)]) / self.q()
 
+    def arrival(self, positions, area):
+        """Model half-rise arrival time of every Gaussian, t0 + tau_i + alpha beta x_h (s)."""
+        alpha, beta = self.log_alpha.exp(), self.log_beta.exp()
+        return self.t0 + self.tau(positions, area) + alpha * beta * half_rise_x(alpha)
+
     def concentration(self, positions, area, t):
         """c_i(t_j) = C_in(t_j - tau_i), shape (T, N)."""
         tau = self.tau(positions, area)
@@ -91,3 +117,9 @@ class Transport(torch.nn.Module):
         ds_node = torch.cat([ds[:1], 0.5 * (ds[1:] + ds[:-1]), ds[-1:]])
         c = self.concentration(positions, area, t)
         return self.log_k.exp() * c * (ds_node / (math.sqrt(2 * math.pi) * sigma_axial))[None, :]
+
+    def density_full(self, positions, sigma_axial):
+        """Peak densities at full concentration (c = 1), shape (N,)."""
+        ds = self.segment_lengths(positions)
+        ds_node = torch.cat([ds[:1], 0.5 * (ds[1:] + ds[:-1]), ds[-1:]])
+        return self.log_k.exp() * ds_node / (math.sqrt(2 * math.pi) * sigma_axial)

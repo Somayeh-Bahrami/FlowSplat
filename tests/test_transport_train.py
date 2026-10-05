@@ -127,3 +127,45 @@ def test_toy_stage_b_refines_radius():
     err1 = np.abs(rad - r)[5:-5].mean()
     assert err1 < 0.5 * err0
     assert float(m.transport.q().detach()) == pytest.approx(300.0, rel=0.08)
+
+
+def test_half_rise_x():
+    from flowsplat.transport import half_rise_x
+
+    for a in (2.5, 3.5, 4.5):
+        al = torch.tensor(a, requires_grad=True)
+        x = half_rise_x(al)
+        val = gamma_variate(torch.tensor(0.0) + 1.0 * x, torch.tensor(0.0), al, torch.tensor(1.0) / al)
+        assert float(val.detach()) == pytest.approx(0.5, abs=1e-6)
+        x.backward()
+        assert torch.isfinite(al.grad)
+    # gradient check against finite differences
+    al = torch.tensor(3.0, dtype=torch.float64, requires_grad=True)
+    half_rise_x(al).backward()
+    h = 1e-5
+    fd = (half_rise_x(torch.tensor(3.0 + h, dtype=torch.float64)) - half_rise_x(torch.tensor(3.0 - h, dtype=torch.float64))) / (2 * h)
+    assert float(al.grad) == pytest.approx(float(fd), rel=1e-4)
+
+
+def test_measured_arrival_matches_model_on_toy():
+    s, xyz, r, proj, thetas, times, pj = _toy(q_true=300.0)
+    truth = tr.CaseModel(s, xyz, r, q_mm3s=300.0)
+    with torch.no_grad():
+        truth.transport.t0.fill_(0.6)
+        truth.transport.log_k.fill_(math.log(0.1))
+        cache = pj.footprints(truth.tube.position, truth.tube.covariance(), thetas)
+        arr, valid = tr.measure_arrival(proj, cache, truth.transport.density_full(truth.tube.position, truth.tube.sigma_a()), times)
+        model_arr = truth.transport.arrival(truth.tube.position, truth.tube.area())
+    assert valid.float().mean() > 0.8
+    dt = 4.4 / 132 * 5  # view spacing of the toy (every 5th frame)
+    assert float((arr - model_arr)[valid].abs().median()) < 0.5 * dt
+
+
+def test_variants_keep_radius_frozen():
+    torch.manual_seed(0)
+    s, xyz, r, proj, thetas, times, pj = _toy(q_true=300.0)
+    for v in ("frozen", "pose", "pose_arr"):
+        m, info = tr.fit_case(proj, thetas, times, s, xyz, r + 0.1, pj, iters_dir=20, iters_a=40, iters_b=20,
+                              q_init=330.0, log=lambda *a: None, variant=v)
+        assert np.allclose(m.tube.radius().detach().numpy(), r + 0.1, atol=1e-4), v
+        assert info["variant"] == v

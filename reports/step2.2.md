@@ -15,7 +15,7 @@ to confirm).
 |---|---|
 | `src/flowsplat/transport.py`, `train.py`, `model.py:ConeProjector` | M4 (tests, prototype) and molab |
 | `notebooks/step2_train.py` | molab GPU |
-| `tests/test_transport_train.py` | M4; whole suite 73 tests pass |
+| `tests/test_transport_train.py` | M4; whole suite 76 tests pass |
 
 ## What was done
 
@@ -54,7 +54,38 @@ this case is "keep geometry frozen longer, add arrival-time loss".
 
 ## Results (molab)
 
-TODO: overfit 121_0, then 20 validation cases.
+### Overfit run 1: 121_0, 60 views, plan route (Stage A then full Stage B), Oct 5, repo `9083c78`
+
+`results/step2.2_overfit_v60_run1_base.json`, figure `results/step2.2_121_0_v60_run1_base.png`.
+
+| Metric | Stage A (geometry = FDK init) | After Stage B | DoD |
+|---|---|---|---|
+| Q relative error | 6.1 % | **4.4 %** | < 10 % |
+| Stenosis diameter error | about 0.07 mm (Step 2.1 init throat) | **0.28 mm** (throat 0.67 vs 0.81 mm) | < 0.2 mm |
+| Radius MAE | 0.05 mm (Step 2.1) | 0.38 mm | |
+| Image loss | 0.0074 | 0.0061 | |
+
+Stage B lowers the image loss while shrinking the radius by about 0.3 mm
+along the whole vessel (figure). The objective itself prefers thinner
+tubes: a Gaussian cross-section with a free amplitude k fits the
+flat-topped lumen profile better when it is narrower, so the area
+A = 2 pi sigma^2 is biased low (a geometry / flow ambiguity). The stenosis
+diameter fails the DoD on the overfit case. 1.8 min per case on the GPU.
+
+### Fallback applied (rule 2)
+
+Plan, Step 2.2 Fallback: "Q does not converge: grid search over Q, then
+fine-tune. Geometry/flow ambiguity: keep geometry frozen longer, add
+arrival-time loss. 30 views insufficient: use 60 and report error vs views
+as a result."
+
+Q converges; the second clause applies. Realised as variants
+(`train.VARIANTS`): `frozen` (geometry frozen for the whole budget),
+`pose` (Stage B moves positions and rotations, radius frozen), `pose_arr`
+(pose + arrival-time loss: arrival at each Gaussian measured from the data
+as the half-peak time of its normalised time-intensity curve, compared with
+t0 + tau_i + the inlet half-rise time). Compared on the first case of each
+of the 5 validation patients before the 20-case run: TODO.
 
 ## DoD
 
@@ -63,4 +94,4 @@ TODO: overfit 121_0, then 20 validation cases.
 | 20 val cases: Q relative error < 10 % | TODO |
 | 20 val cases: stenosis diameter error < 0.2 mm | TODO |
 
-**DoD met: no (in progress). Fallback used: no.**
+**DoD met: no (in progress). Fallback used: yes (keep geometry frozen longer, add arrival-time loss), variant comparison pending.**
