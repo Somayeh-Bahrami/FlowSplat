@@ -273,6 +273,37 @@ fails the Step 2.1 v2 rule with MAE 0.316 mm). k was used as computed
 passes. Per the protocol both results go to the user / Gate 1; no further
 change made.
 
+### Run 7 (DoD run, 4DRGS init + calibrated radius): 20 validation cases, Oct 6, repo `c7d0ca8`
+
+Approved by the user (option 1 after run 6). Same 20 validation cases and
+DoD rule as run 4; 4DRGS init (Step 2.1 v2) for all 20, radius x k with
+k = 1.1136 from the 5 training cases (unchanged); variants pose_arr
+(primary) and frozen; 60 views.
+
+**Step 2.1 v2 on the 20 cases:** lesion coverage 100 % and vessel coverage
+>= 97.2 % on all 20; radius MAE 0.056 to 0.197 mm, all pass the v2 rule.
+Area ratio (before k) 0.80 to 0.93, mean 0.875, SD 0.040.
+
+| Variant | Q rel. err. mean (median) | Q < 10 % | Q est / GT - 1 (mean +- SD) | Diam. err. mean (median) | Diam. < 0.2 mm | DoD (means) |
+|---|---|---|---|---|---|---|
+| pose_arr (primary) | 10.5 % (9.9 %) | 11 / 20 | +10.5 % +- 3.9 % | 0.146 mm (0.097 mm) | 17 / 20 | **not met** (Q) |
+| frozen | 8.3 % (9.0 %) | 13 / 20 | +7.8 % +- 5.2 % | 0.146 mm (0.097 mm) | 17 / 20 | **met** |
+| FDK init, pose_arr (run 4) | 5.2 % (3.6 %) | 17 / 20 | | 0.36 mm (0.12 mm) | 10 / 19 | not met (diam.) |
+| FDK init, frozen (run 4) | 4.1 % | 19 / 20 | | 0.26 mm (16 lesions found) | | not met (diam.) |
+
+- Lesion found on all 20 cases (FDK: 19 or 16).
+- The Q error is now mostly a systematic overestimate, not scatter: the
+  validation area ratios have mean 0.875 (would give k = 1.069), the 5
+  training cases 0.806 (k = 1.114; 110_0 at 0.639 pulls it). The
+  remaining spread (SD 3.9 to 5.2 %) is within the DoD.
+- pose_arr adds about +2.7 % Q over frozen on average.
+- Diameter failures: 131_1 0.90 mm (throat point 1.6 mm from the GT throat,
+  throat radius -0.42 mm), 135_2 0.24 mm, 121_2 0.23 mm.
+- 4DRGS is not bitwise repeatable: 131_0 was re-run in this session and its
+  throat error changed from +0.040 to -0.008 mm (diameter error 0.43 mm in
+  run 6, 0.18 mm here). Seeds of 4DRGS are not controlled by us (CUDA
+  nondeterminism, UNVERIFIED cause).
+
 ## DoD
 
 | DoD part | Result (pose_arr, 20 val cases, 60 views) | Met |
@@ -284,7 +315,13 @@ DoD rule as interpreted: mean over the 20 cases (interpretation ours, to
 confirm). With the median, the diameter would pass (0.12 mm) and Q would
 pass; per case, 10 of 19 pass the diameter.
 
-**DoD met: no (Q yes, stenosis diameter no). Fallback used: yes.** Plan,
+Update Oct 6 (runs 5 to 7, approved plan deviation: 4DRGS init and radius
+calibration): with the pre-specified primary variant pose_arr the DoD is
+still not met (Q 10.5 %, diameter 0.146 mm); with frozen both parts are met
+on 20 cases (Q 8.3 %, diameter 0.146 mm). Which variant counts is a Gate 1
+decision, not made here.
+
+**DoD met (run 4, FDK): no (Q yes, stenosis diameter no). Fallback used: yes.** Plan,
 Step 2.2 Fallback: "Q does not converge: grid search over Q, then
 fine-tune. Geometry/flow ambiguity: keep geometry frozen longer, add
 arrival-time loss. 30 views insufficient: use 60 and report error vs views
@@ -294,6 +331,11 @@ clauses of the fallback are used, and the diameter part still fails.
 Rule 2: no further method change before the Oct 20 gate review.
 
 ## For the Gate 1 review (Oct 20)
+
+- Oct 6 summary of the options for the gate: FDK init (Q 5.2 %, diameter
+  0.36 mm); 4DRGS + k, pose_arr (Q 10.5 %, diameter 0.146 mm); 4DRGS + k,
+  frozen (Q 8.3 %, diameter 0.146 mm, both DoD parts met). The Q error of
+  the 4DRGS route is a calibration bias (k from 5 training cases).
 
 - Gate 1 condition (plan): "Q error < 10 % on single vessel?" Result: mean
   5.2 % (primary), 4.1 % (frozen); 17 to 19 of 20 cases below 10 %.
