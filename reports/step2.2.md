@@ -236,6 +236,43 @@ Fixed before the run.
 - If it passes: run the 20 validation cases with the same k. If not: both
   results go to Gate 1 unchanged.
 
+### Run 6 results: calibrated radius, Oct 6 (molab, repo `63cfa36`)
+
+**Calibration (5 training cases, 4DRGS, 60 views).** Area ratios 109_0
+0.789, 110_0 0.639, 112_0 0.844, 114_0 0.926, 115_0 0.834; k = 1.1136.
+Lesion coverage 100 % on all 5; 110_0 is an outlier (radius bias -0.32 mm,
+fails the Step 2.1 v2 rule with MAE 0.316 mm). k was used as computed
+(protocol), although the 5 validation cases alone would have given about
+1.07. 112_0 used M1 = 27695 (55390 FDK voxels above threshold).
+
+**Step 2.2, same 5 validation cases, init radius x k.**
+
+| Case | Q err frozen | Q err pose_arr | Q est / GT (frozen) | Diam. err (mm) |
+|---|---|---|---|---|
+| 121_0 | 8.6 % | 10.3 % | 1.086 | 0.092 |
+| 122_0 | 1.7 % | 7.0 % | 1.017 | 0.041 |
+| 130_0 | 5.2 % | 11.3 % | 1.052 | 0.041 |
+| 131_0 | 9.9 % | 16.5 % | 1.099 | 0.430 |
+| 135_0 | 11.7 % | 13.9 % | 1.117 | 0.193 |
+| **Mean** | **7.4 %** | **11.8 %** | | **0.159** |
+
+- frozen: mean Q 7.4 % (4 / 5 below 10 %), mean diameter 0.159 mm
+  (4 / 5 below 0.2 mm): both DoD parts met on 5 cases.
+- pose_arr (pre-specified primary): Q 11.8 % (1 / 5 below 10 %): not met.
+- Q is now overestimated on every case (k from the training cases is
+  larger than the validation cases need). 131_0 throat is now 0.21 mm too
+  wide (diameter error 0.43 mm): its throat was already slightly wide
+  before scaling.
+- Main finding: the area bias varies from case to case (training area
+  ratios 0.64 to 0.93, validation 0.81 to 0.91). One global factor removes
+  the mean bias but not this spread, and Q inherits it one to one. The
+  Q accuracy of this pipeline is bounded by the per-case area accuracy of
+  the init.
+
+**Outcome against the run 6 protocol:** primary (pose_arr) fails, frozen
+passes. Per the protocol both results go to the user / Gate 1; no further
+change made.
+
 ## DoD
 
 | DoD part | Result (pose_arr, 20 val cases, 60 views) | Met |
