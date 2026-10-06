@@ -171,12 +171,28 @@ def radius_error(xyz_est, r_est, s_gt, xyz_gt, r_gt, trim_mm=5.0):
     err = np.abs(r_est[keep] - r_gt[j[keep]])
     return {
         "mae_mm": float(err.mean()),
+        # mean estimated / GT lumen area on the same matched points (Q scales
+        # with A, Step 2.2 run 5); input of radius_scale
+        "area_ratio": float((r_est[keep] ** 2).mean() / (r_gt[j[keep]] ** 2).mean()),
         "p90_mm": float(np.percentile(err, 90)),
         "bias_mm": float((r_est[keep] - r_gt[j[keep]]).mean()),
         "centerline_dist_mm": float(d[keep].mean()),
         "coverage": float(keep.mean()),
         "n": int(keep.sum()),
     }
+
+
+def radius_scale(area_ratios):
+    """One multiplicative radius correction from calibration cases:
+    k = 1 / sqrt(mean area ratio), so the mean lumen area (which sets Q,
+    plan: tau = int A / Q ds) is unbiased on the calibration set. Fitted on
+    training-split cases only and applied unchanged to validation / test.
+    Multiplicative rather than an offset because the bias grows with the
+    radius (Step 2.1 v2: throat nearly exact, healthy segments 0.08 to
+    0.15 mm low). Ref: OURS (plan deviation approved Oct 6, option 1).
+    """
+    a = np.asarray(area_ratios, float)
+    return float(1.0 / np.sqrt(a.mean()))
 
 
 def coverage_metrics(xyz_est, r_est, s_gt, xyz_gt, lesion_center_mm, lesion_len_mm, r_min_gt_mm, tol_mm=2.0):

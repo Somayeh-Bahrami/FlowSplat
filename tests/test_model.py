@@ -202,3 +202,15 @@ def test_fourdrgs_volume_to_lumen_frame():
     vol_xyz = tigre.transpose(2, 1, 0)  # 4DRGS query volume [x, y, z]
     written = vol_xyz.transpose(2, 1, 0)  # test.py: GetImageFromArray(vol.transpose(2, 1, 0))
     assert np.array_equal(md.fourdrgs_volume_to_lumen_frame(written, perm), lum)
+
+
+def test_area_ratio_and_radius_scale():
+    s = np.arange(0, 50.0001, 0.5)
+    xyz = np.stack([s, np.zeros_like(s), np.zeros_like(s)], 1)
+    r = np.full_like(s, 1.5)
+    e = md.radius_error(xyz, 0.9 * r, s, xyz, r)
+    assert e["area_ratio"] == pytest.approx(0.81)
+    k = md.radius_scale([e["area_ratio"]])
+    assert k == pytest.approx(1 / 0.9)
+    assert md.radius_error(xyz, k * 0.9 * r, s, xyz, r)["area_ratio"] == pytest.approx(1.0)
+    assert md.radius_scale([0.81, 1.0]) == pytest.approx(1 / np.sqrt(0.905))

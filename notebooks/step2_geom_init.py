@@ -29,6 +29,10 @@
 # Run from the repo root:  python notebooks/step2_geom_init.py
 # FLOWSPLAT_VIEWS (default 60), FLOWSPLAT_CASES (default: first case of 5
 # validation patients), FLOWSPLAT_4DRGS_ITERS (default 10000).
+# FLOWSPLAT_SPLIT=train (Oct 6, option 1 approved by the user): default cases
+#   = first case of the first 5 TRAINING patients; result files get the
+#   suffix _train5 and the summary holds radius_scale_calib
+#   (md.radius_scale), applied unchanged in Step 2.2 (FLOWSPLAT_R_SCALE).
 
 import marimo
 
@@ -80,9 +84,11 @@ def _(Path, mo, os, sys):
     DOD_MM = 0.2  # plan, Step 2.1 DoD
     COV_MIN = 0.9  # v2 pass rule: vessel and lesion coverage (OURS, fixed Oct 5 before the run)
     DRGS_ITERS = int(os.environ.get("FLOWSPLAT_4DRGS_ITERS", "10000"))
-    print("views:", N_VIEWS, "| init:", INIT, "| out:", OUT)
+    SPLIT = os.environ.get("FLOWSPLAT_SPLIT", "val")
+    RTAG = "_train5" if SPLIT == "train" else ""
+    print("views:", N_VIEWS, "| init:", INIT, "| split:", SPLIT, "| out:", OUT)
     return (COV_MIN, DATA, DOD_MM, DRGS_DIR, DRGS_ITERS, FLOWSPLAT_DIR, INIT, N_VIEWS, OUT, PACK, R2G_DIR,
-            RENDER, md, rt)
+            RENDER, RTAG, SPLIT, md, rt)
 
 
 @app.cell
@@ -112,7 +118,7 @@ def _(DRGS_DIR, FLOWSPLAT_DIR, INIT, R2G_DIR, os, subprocess, sys):
 
 
 @app.cell
-def _(DATA, PACK, RENDER, ext_ready, json, np, os, rt, zipfile):
+def _(DATA, PACK, RENDER, SPLIT, ext_ready, json, np, os, rt, zipfile):
     # b) data
     _ = ext_ready
     if not (DATA / "splits.json").exists():
@@ -123,7 +129,7 @@ def _(DATA, PACK, RENDER, ext_ready, json, np, os, rt, zipfile):
             _z.extractall(DATA)
     _splits = json.loads((DATA / "splits.json").read_text())
     _env_cases = os.environ.get("FLOWSPLAT_CASES")
-    CASES = _env_cases.split(",") if _env_cases else [f"{g}_0" for g in _splits["val"][:5]]
+    CASES = _env_cases.split(",") if _env_cases else [f"{g}_0" for g in _splits[SPLIT][:5]]
     RENDER.mkdir(parents=True, exist_ok=True)
     AXCODES = {}
     for _c in CASES:
@@ -216,7 +222,7 @@ def _(CASES, DATA, DRGS_DIR, DRGS_ITERS, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, js
 
 
 @app.cell
-def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, runs, time):
+def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, RTAG, SPLIT, json, md, np, runs, time):
     # d) geometry from the static volume, radius error, tube Gaussians
     import matplotlib as _mpl
 
@@ -264,14 +270,17 @@ def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md
         _ax[1].set_ylabel("R (mm)")
         _ax[1].legend()
         _fig.tight_layout()
-        _fig.savefig(_res / f"step2.1_{_c}_v{N_VIEWS}_{INIT}.png", dpi=80)
+        _fig.savefig(_res / f"step2.1_{_c}_v{N_VIEWS}_{INIT}{RTAG}.png", dpi=80)
         _plt.close(_fig)
         print(json.dumps({k: v for k, v in row.items() if k != "r2g_eval"}), flush=True)
     summary = {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "views": N_VIEWS,
         "init": INIT,
+        "split": SPLIT,
         "dod_mm": DOD_MM,
+        "area_ratio_per_case": {r["case"]: round(r["area_ratio"], 4) for r in rows},
+        "radius_scale_calib": md.radius_scale([r["area_ratio"] for r in rows]),
         "mae_mm_per_case": {r["case"]: round(r["mae_mm"], 4) for r in rows},
         "mae_mm_mean": float(np.mean([r["mae_mm"] for r in rows])),
         "all_pass": all(r["pass"] for r in rows),
@@ -284,7 +293,7 @@ def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md
         "throat_err_mm_per_case": {r["case"]: round(r["throat_err_mm"], 3) for r in rows},
         "rows": rows,
     }
-    (_res / f"step2.1_geom_init_v{N_VIEWS}_{INIT}.json").write_text(json.dumps(summary, indent=2, default=str))
+    (_res / f"step2.1_geom_init_v{N_VIEWS}_{INIT}{RTAG}.json").write_text(json.dumps(summary, indent=2, default=str))
     print(json.dumps({k: v for k, v in summary.items() if k != "rows"}, indent=2))
     return
 

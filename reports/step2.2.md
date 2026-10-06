@@ -221,6 +221,21 @@ Step 2.1 v2). Variants frozen and pose_arr, 60 views; compared with run 3
   two inits fail opposite halves of the DoD for the same reason (radius
   error), at the throat for FDK and along the whole vessel for 4DRGS.
 
+### Run 6 protocol: radius calibration on training cases (approved Oct 6, option 1)
+
+Fixed before the run.
+- Step 2.1 v2 (4DRGS, 60 views, same settings) on the first case of the
+  first 5 training patients: 109_0, 110_0, 112_0, 114_0, 115_0.
+- Per case the area ratio mean(R_est^2) / mean(R_gt^2) on the matched,
+  end-trimmed points; k = 1 / sqrt(mean of the 5 ratios)
+  (md.radius_scale). No validation case is used to choose k.
+- Step 2.2 on the same 5 validation cases as runs 3 and 5, variants frozen
+  and pose_arr, init radius multiplied by k, nothing else changed.
+- Success (5 cases): mean Q error < 10 % and mean stenosis diameter error
+  < 0.2 mm, for pose_arr (primary) and frozen.
+- If it passes: run the 20 validation cases with the same k. If not: both
+  results go to Gate 1 unchanged.
+
 ## DoD
 
 | DoD part | Result (pose_arr, 20 val cases, 60 views) | Met |

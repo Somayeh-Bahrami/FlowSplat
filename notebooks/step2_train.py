@@ -22,6 +22,9 @@
 #   of Step 2.1 v2 (approved plan deviation, Oct 5), read from
 #   WORK/step2_1/<case>_v<views>_4drgs/vol_lumen.npy; run
 #   notebooks/step2_geom_init.py with FLOWSPLAT_INIT=4drgs first (same session)
+# FLOWSPLAT_R_SCALE = radius factor applied to the init radius (default 1;
+#   Oct 6: radius_scale_calib from Step 2.1 v2 on 5 training cases, file
+#   suffix _cal)
 
 import marimo
 
@@ -68,12 +71,13 @@ def _(Path, mo, os, sys):
     VARIANTS = tuple(os.environ.get("FLOWSPLAT_VARIANTS", ",".join(tr.VARIANTS)).split(","))
     N_VIEWS = int(os.environ.get("FLOWSPLAT_VIEWS", "60"))
     INIT = os.environ.get("FLOWSPLAT_INIT", "fdk")
-    TAG = "" if INIT == "fdk" else f"_{INIT}"  # file names of the FDK runs unchanged
+    R_SCALE = float(os.environ.get("FLOWSPLAT_R_SCALE", "1"))
+    TAG = ("" if INIT == "fdk" else f"_{INIT}") + ("_cal" if R_SCALE != 1.0 else "")  # FDK file names unchanged
     INIT_DIR = WORK / "step2_1"
     DOD_Q, DOD_DIAM_MM = 0.10, 0.2  # plan, Step 2.2 DoD
-    print("mode:", MODE, "| views:", N_VIEWS, "| variants:", VARIANTS, "| init:", INIT)
-    return (DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, INIT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, TAG,
-            VARIANTS, md, rt, tr)
+    print("mode:", MODE, "| views:", N_VIEWS, "| variants:", VARIANTS, "| init:", INIT, "| r_scale:", R_SCALE)
+    return (DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, INIT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, R_SCALE,
+            TAG, VARIANTS, md, rt, tr)
 
 
 @app.cell
@@ -127,7 +131,7 @@ def _(DATA, MODE, PACK, RENDER, json, np, os, rt, tigre_ready, zipfile):
 
 
 @app.cell
-def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, TAG, VARIANTS, json, md, np, rt, time, tr):
+def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, R_SCALE, TAG, VARIANTS, json, md, np, rt, time, tr):
     # c) fit every case with every requested variant (same init per case)
     import torch
 
@@ -148,6 +152,7 @@ def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, TAG, VARIANTS, json, md
         else:
             _vol, _ = md.fdk_volume_lumen_frame(RENDER / f"{_c}.npz", n_views=N_VIEWS)
         _s, _xyz_l, _r = md.build_from_volume(_vol, _meta["lumen"]["vox_mm"], _meta["lumen"]["origin_mm"])
+        _r = _r * R_SCALE  # calibrated on training cases (md.radius_scale), 1 = none
         _world, _ = md.lumen_to_world(_xyz_l, _meta["lumen"], _meta["axis_perm"])
         _proj = torch.tensor(_z["proj"][_idx].astype(np.float32), device=device)
         _pj = md.ConeProjector(_meta["geometry"], device=device)
@@ -165,7 +170,8 @@ def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, TAG, VARIANTS, json, md
             np.savez(_d / "estimate.npz", radius_mm=_est["radius_mm"], position_world_mm=_est["position_world_mm"],
                      init_s=_s, init_xyz_lumen=_xyz_l, init_r=_r)
             (_d / "history.json").write_text(json.dumps(_info["history"]))
-            results[f"{_c}|{_v}"] = {**_ev, "case": _c, "variant": _v, "init": INIT, "direction": _info["direction"],
+            results[f"{_c}|{_v}"] = {**_ev, "case": _c, "variant": _v, "init": INIT, "r_scale": R_SCALE,
+                                     "direction": _info["direction"],
                                      "minutes": round((time.time() - _t0) / 60, 2),
                                      **{k: v for k, v in _est.items() if k not in ("radius_mm", "position_world_mm")}}
             print(_c, _v, json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in results[f"{_c}|{_v}"].items()}), flush=True)
@@ -173,7 +179,7 @@ def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, TAG, VARIANTS, json, md
 
 
 @app.cell
-def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, MODE, N_VIEWS, OUT, RENDER, TAG, VARIANTS, json, md, np, results, time):
+def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, MODE, N_VIEWS, OUT, RENDER, R_SCALE, TAG, VARIANTS, json, md, np, results, time):
     # d) summary per variant and figures per case (all variants in one plot)
     import matplotlib as _mpl
 
@@ -203,7 +209,7 @@ def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, MODE, N_VIEWS, OUT, RENDER,
         }
     summary = {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "mode": MODE, "views": N_VIEWS, "variants": list(VARIANTS), "init": INIT,
+        "mode": MODE, "views": N_VIEWS, "variants": list(VARIANTS), "init": INIT, "r_scale": R_SCALE,
         "dod_rule": "mean Q relative error < 10 % and mean stenosis diameter error < 0.2 mm over the cases (per-case fractions reported too)",
         "per_variant": per_variant,
         "cases": results,
