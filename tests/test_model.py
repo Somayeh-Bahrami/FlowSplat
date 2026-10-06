@@ -141,3 +141,64 @@ def test_dim_segment_hysteresis_option():
     assert s_e[-1] > 54.0  # whole vessel (minus end caps), not only the bright 35 mm
     s_e1, _ = md.centerline_from_volume(vol, lum["vox_mm"], lum["origin_mm"])
     assert s_e1[-1] < 40.0  # default single threshold loses the dim part
+
+
+# ---------------- 4DRGS I/O (Step 2.1 v2) ----------------
+def _gd_4drgs():
+    return {"DSD": 1200.0, "DSO": 750.0, "nDetector": [276, 260], "dDetector": [0.64, 0.64],
+            "sDetector": [176.64, 166.4], "nVoxel": [400, 278, 253], "dVoxel": [0.25, 0.25, 0.25],
+            "sVoxel": [100.0, 69.5, 63.25], "offOrigin": [0.0, 0.0, 0.0], "offDetector": [0.0, 0.0]}
+
+
+def test_fourdrgs_transforms_rebuilds_tigre_geometry():
+    """Re-create the TIGRE geometry the way 4DRGS ct/tigre_ct.py does and
+    compare with ours (axis order of volume and detector)."""
+    gd = _gd_4drgs()
+    ang = np.deg2rad(np.linspace(0, 198, 133))
+    tf = md.fourdrgs_transforms(gd, ang)
+    assert tf["volume_resolution"][::-1] == gd["nVoxel"]
+    assert tf["volume_phy"][::-1] == gd["sVoxel"]
+    assert tf["volume_spacing"][::-1] == gd["dVoxel"]
+    w, h = tf["proj_resolution"]
+    sx, sy = tf["proj_spacing"]
+    assert [h, w] == gd["nDetector"]
+    assert np.allclose([h * sy, w * sx], gd["sDetector"])
+    assert np.allclose(tf["proj_phy"], [w * sx, h * sy])
+    assert (tf["sad"], tf["sid"]) == (gd["DSO"], gd["DSD"])
+    assert tf["N_views"] == 133 and len(tf["frames"]) == 133
+    assert tf["frames"][10]["PrimaryAngle"] == pytest.approx(ang[10])
+    bad = dict(gd, offOrigin=[1.0, 0.0, 0.0])
+    with pytest.raises(ValueError):
+        md.fourdrgs_transforms(bad, ang)
+
+
+def test_fourdrgs_view_rule_matches_ours():
+    """4DRGS get_indice: arange(0, N, N / Nviews).astype(int)."""
+    from flowsplat import render_tigre as rt
+
+    for n in (30, 60):
+        theirs = np.arange(0, 133, 133 / n).astype(int)
+        assert theirs.tolist() == rt.view_subsets(133, (n,))[str(n)]["train"]
+
+
+def test_fourdrgs_runs_give_back_the_projections():
+    proj = np.random.default_rng(0).uniform(-0.01, 1.6, (3, 5, 4)).astype(np.float16)
+    mask, fill = md.fourdrgs_runs(proj)
+    dsa = np.log(mask) - np.log(fill)  # 4DRGS readCameras (before its clip at 0)
+    assert np.allclose(dsa[:, ::-1, :], proj.astype(np.float64), atol=1e-5)  # tigre_ct.fdk flips back
+
+
+def test_fourdrgs_m1_rule():
+    assert md.fourdrgs_m1(85_000) == 30_000
+    assert md.fourdrgs_m1(60_000) == 30_000
+    assert md.fourdrgs_m1(50_000) == 25_000
+    assert md.fourdrgs_m1(20_000) == 10_000
+
+
+def test_fourdrgs_volume_to_lumen_frame():
+    lum = np.random.default_rng(1).random((4, 5, 6))  # lumen grid
+    perm = [1, 2, 0]  # not self-inverse, to catch argsort vs perm
+    tigre = lum.transpose(perm)  # render_tigre: TIGRE array = lumen.transpose(perm)
+    vol_xyz = tigre.transpose(2, 1, 0)  # 4DRGS query volume [x, y, z]
+    written = vol_xyz.transpose(2, 1, 0)  # test.py: GetImageFromArray(vol.transpose(2, 1, 0))
+    assert np.array_equal(md.fourdrgs_volume_to_lumen_frame(written, perm), lum)

@@ -169,3 +169,37 @@ volume skeleton." The plan route (static R2-Gaussian, run 1) gave 0.20 to
   error < 0.2 mm).
 - Estimated centerlines are 3.5 to 11 mm longer than GT (end caps and FDK
   tails), excluded by the 5 mm end trim.
+
+## Step 2.1 v2: 4DRGS initialisation (plan deviation, approved Oct 5)
+
+**Why.** Step 2.2 on 20 validation cases met the Q part of its DoD but not
+the stenosis diameter part (mean 0.36 mm). The diameter errors are the same
+for the variants frozen, pose and pose_arr, which keep the initial radius,
+so the error comes from the Step 2.1 FDK init. The FDK radius MAE (0.045 to
+0.117 mm) only scores points that were found: 131_0 misses its lesion
+(lesion coverage 0 %) and the 122_0 throat is 0.41 vs 0.89 mm. External
+feedback (Oct 5) proposed 4DRGS as the initializer. The user approved
+re-doing Step 2.1 with 4DRGS, then a 5-case Step 2.2, before concluding
+Step 2.2. Static R2-Gaussian is not re-tried: it already failed (run 1).
+
+**Protocol, fixed before any 4DRGS result.**
+- Same 5 cases (121_0, 122_0, 130_0, 131_0, 135_0), same 60 views.
+- Official 4DRGS at commit 38006ed, source untouched, README fast setting
+  (10k iterations, ADC until 5k, as reproduced in Step 0.1), TIGRE FDK
+  init (`--fdk_toolbox=tigre`).
+- Init volume: the 4DRGS time-averaged voxel query (VQR) volume; then the
+  same centerline and half-max radius code as the FDK route.
+- Pass (per case): radius MAE < 0.2 mm AND vessel coverage >= 90 % AND
+  lesion coverage >= 90 %. A missed lesion is a failure.
+- Also reported: throat radius error, 4DRGS held-out view PSNR / SSIM.
+- Then Step 2.2 on the same 5 cases with frozen and pose_arr, compared with
+  the FDK init (variants5 run 3: pose_arr Q 4.4 %, diameter 0.63 mm mean;
+  frozen Q 3.8 %, diameter 0.36 mm on 4 cases with a lesion).
+- Decision after the 5 cases: run the 20 validation cases with the better
+  init. If 4DRGS does not improve lesion coverage on 131_0, that case is
+  reported as an observability limitation (lesion opacified over part of
+  the sweep only).
+- Caveat for the paper: 4DRGS is also baseline 1 (Step 4.1). Using it as
+  the initializer must be stated in the method section.
+
+Results: pending (molab).

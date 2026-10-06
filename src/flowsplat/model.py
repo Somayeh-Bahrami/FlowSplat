@@ -437,6 +437,94 @@ def fdk_volume_lumen_frame(render_npz, n_views=60, filt="hann"):
     return np.asarray(vol_t).transpose(np.argsort(meta["axis_perm"])), meta
 
 
+# ============================ 4DRGS I/O (Step 2.1 v2) ============================
+# Plan deviation approved by the user on Oct 5 (Step 2.1 v2): 4DRGS (static
+# Gaussian geometry + time-dependent attenuation) replaces the FDK skeleton
+# as the init volume. Defaults of 4DRGS ModelParams (commit 38006ed):
+FOURDRGS_THRES_FDK = 0.016  # thres_percent_fdk (absolute FDK value)
+FOURDRGS_M1 = 30_000  # FDK-masked points sampled without replacement
+
+
+def fourdrgs_transforms(gd, angles_rad):
+    """transforms.json of a 4DRGS case for one TIGRE geometry dict.
+
+    Keys and axis order as read by 4DRGS scene/dataset_readers.py
+    readCameras and ct/tigre_ct.py (commit 38006ed): volume_* in [x, y, z]
+    (TIGRE nVoxel / sVoxel / dVoxel reversed), proj_* as [width, height],
+    PrimaryAngle in radians (passed to tigre.algorithms.fdk unchanged),
+    SecondaryAngle ignored, origin and detector offsets fixed to 0.
+    Every frame is listed; 4DRGS picks the training views itself with
+    arange(0, N, N / Nviews), the same frames as render_tigre.view_subsets.
+    Ref: 4DRGS code (data format), OURS (conversion).
+    """
+    if any(abs(v) > 0 for v in list(gd["offOrigin"]) + list(gd["offDetector"])):
+        raise ValueError("4DRGS assumes zero origin and detector offsets")
+    nv, nu = gd["nDetector"]
+    dv, du = gd["dDetector"]
+    return {
+        "volume_resolution": [int(n) for n in gd["nVoxel"][::-1]],
+        "volume_phy": [float(x) for x in gd["sVoxel"][::-1]],
+        "volume_spacing": [float(x) for x in gd["dVoxel"][::-1]],
+        "sad": float(gd["DSO"]),
+        "sid": float(gd["DSD"]),
+        "proj_resolution": [int(nu), int(nv)],
+        "proj_phy": [float(nu * du), float(nv * dv)],
+        "proj_spacing": [float(du), float(dv)],
+        "N_views": int(len(angles_rad)),
+        "frames": [{"file": f"frame_{j:03d}", "PrimaryAngle": float(a)} for j, a in enumerate(angles_rad)],
+    }
+
+
+def fourdrgs_runs(proj):
+    """(mask_run, fill_run) with log(mask) - log(fill) = proj, the DSA that
+    4DRGS readCameras forms. Images flipped vertically ([::-1, :]) relative
+    to tigre.Ax, because 4DRGS tigre_ct.fdk flips them back before FDK.
+    proj is the physical log ratio (mu x path length), as in real DSA, so the
+    4DRGS absolute FDK threshold keeps its meaning. Ref: 4DRGS code, OURS.
+    """
+    img = np.asarray(proj, np.float64)[:, ::-1, :]
+    return np.ones(img.shape, np.float32), np.exp(-img).astype(np.float32)
+
+
+def fourdrgs_m1(n_above, m1=FOURDRGS_M1):
+    """Number of FDK-masked init points. n_above: voxels of our TIGRE FDK of
+    the same views above the 4DRGS threshold (its own FDK clips negative
+    projections first, so its count differs slightly). 4DRGS default when
+    n_above >= 2 m1 (margin), else half of them, as for R2-Gaussian in
+    Step 2.1 run 1: np.random.choice without replacement fails if fewer
+    voxels than m1 pass. Ref: OURS."""
+    return m1 if n_above >= 2 * m1 else max(1, n_above // 2)
+
+
+def write_4drgs_case(render_npz, out_dir):
+    """Write one rendered case as a 4DRGS dataset folder (transforms.json,
+    mask_run.nii.gz, fill_run.nii.gz) without changing 4DRGS. Needs
+    SimpleITK (installed on molab with 4DRGS). Returns the transforms dict.
+    Ref: 4DRGS code (format), OURS (conversion)."""
+    import json
+    from pathlib import Path
+
+    import SimpleITK as sitk
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    z = np.load(render_npz)
+    meta = json.loads(str(z["meta"]))
+    tf = fourdrgs_transforms(meta["geometry"], np.deg2rad(z["angles_deg"]).astype(float))
+    mask, fill = fourdrgs_runs(z["proj"])
+    sitk.WriteImage(sitk.GetImageFromArray(mask), str(out / "mask_run.nii.gz"))
+    sitk.WriteImage(sitk.GetImageFromArray(fill), str(out / "fill_run.nii.gz"))
+    (out / "transforms.json").write_text(json.dumps(tf, indent=1))
+    return tf
+
+
+def fourdrgs_volume_to_lumen_frame(vol_zyx, axis_perm):
+    """4DRGS vol_pred.nii.gz array (SimpleITK order [z, y, x] = TIGRE order,
+    test.py voxel_query_reconstruction writes vol.transpose(2, 1, 0)) ->
+    lumen-grid axes. Ref: 4DRGS test.py (VQR output), OURS."""
+    return np.asarray(vol_zyx).transpose(np.argsort(axis_perm))
+
+
 # ============================ cone-beam Gaussian projector ============================
 # Geometry convention of the detector relative to TIGRE (sign of the angle,
 # a start offset, signs of the u and v detector axes). Calibrated on Oct 4

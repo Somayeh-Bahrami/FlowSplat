@@ -30,7 +30,10 @@
 #       python notebooks/step0_setup.py
 #     (script mode starts without the button; FLOWSPLAT_RUN_4DRGS=0 skips 4DRGS;
 #     FLOWSPLAT_BUILD_ONLY=1 stops after the builds; FLOWSPLAT_ONLY_4DRGS=1 skips
-#     the R2-Gaussian example and saves results/step0.1_4drgs.json)
+#     the R2-Gaussian example and saves results/step0.1_4drgs.json;
+#     FLOWSPLAT_4DRGS_BUILD_ONLY=1 builds R2-Gaussian, TIGRE and the 4DRGS
+#     dependencies, runs no example and saves nothing (used by
+#     notebooks/step2_geom_init.py with FLOWSPLAT_INIT=4drgs))
 
 import marimo
 
@@ -781,7 +784,7 @@ def _(
     mo.stop(os.environ.get("FLOWSPLAT_BUILD_ONLY") == "1", mo.md("Build only: stopped after the builds."))
     # FLOWSPLAT_ONLY_4DRGS=1: skip this example (already reproduced, see
     # results/step0.1.json) and run only the TIGRE check and 4DRGS.
-    if os.environ.get("FLOWSPLAT_ONLY_4DRGS") == "1":
+    if os.environ.get("FLOWSPLAT_ONLY_4DRGS") == "1" or os.environ.get("FLOWSPLAT_4DRGS_BUILD_ONLY") == "1":
         r2g_result = {"skipped": "FLOWSPLAT_ONLY_4DRGS=1; see results/step0.1.json"}
     else:
         _data = WORK / "data_r2g"
@@ -897,6 +900,10 @@ def _(
     # A failure here is recorded and does not block saving the other results.
     _ = tigre_result
     drgs_result = {"ran": False}
+
+    class _BuildOnly(Exception):
+        pass
+
     if run_4drgs.value:
         try:
             _env = dict(CUDA_ENV)  # same CUDA environment as the R2-Gaussian builds
@@ -966,6 +973,8 @@ def _(
                                        "reason": "The uv venv does not read the user site-packages. Same file list; no source change."})
                 if not _leap_ok():
                     raise RuntimeError("leapctype still not importable after the LEAP build")
+            if os.environ.get("FLOWSPLAT_4DRGS_BUILD_ONLY") == "1":
+                raise _BuildOnly
 
             _case = WORK / "data_4drgs" / "case2"
             if not (_case / "transforms.json").exists():
@@ -1035,6 +1044,8 @@ def _(
                     "Whether the README numbers used LEAP or TIGRE is UNVERIFIED.",
                 }
             )
+        except _BuildOnly:
+            drgs_result = {"ran": False, "build_only": True}
         except Exception as _e:  # recorded, not hidden
             drgs_result = {"ran": False, "error": f"{type(_e).__name__}: {_e}"}
     print("=== 4DRGS ===")
@@ -1063,6 +1074,8 @@ def _(
     time,
 ):
     # h) Save everything to results/step0.1.json and show it for copy / paste.
+    mo.stop(os.environ.get("FLOWSPLAT_4DRGS_BUILD_ONLY") == "1",
+            mo.md(f"4DRGS build only: nothing saved. 4DRGS: {drgs_result}"))
     _untouched = {"r2_gaussian": source_untouched(R2G_DIR), "tigre": source_untouched(TIGRE_DIR)}
     if run_4drgs.value and (DRGS_DIR / ".git").exists():
         _untouched["4drgs"] = source_untouched(DRGS_DIR)

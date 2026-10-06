@@ -13,13 +13,22 @@
 #      (flowsplat.model.write_r2g_case), run R2-Gaussian's own
 #      initialize_pcd.py and train.py at defaults (static model on the
 #      dynamic views = time-averaged volume, plan Step 2.1)
+#      FLOWSPLAT_INIT=4drgs (Step 2.1 v2, plan deviation approved Oct 5):
+#      write the case as a 4DRGS dataset (flowsplat.model.write_4drgs_case),
+#      run the official 4DRGS train.py (README fast setting, 10k / ADC 5k, as
+#      reproduced in Step 0.1), take its time-averaged voxel query volume
+#      (test.py VQR, written before its mesh / ICP evaluation, which needs a
+#      reference mesh we do not have) and its held-out view PSNR (test.py
+#      --render_2d)
 #   d) centerline + half-maximum radius from the static volume
 #      (flowsplat.model.build_from_volume), tube Gaussians, radius error vs
-#      ground truth; results/step2.1_geom_init.json and figures
+#      ground truth; results/step2.1_geom_init.json and figures.
+#      v2 pass rule (fixed before the run): radius MAE < 0.2 mm AND vessel
+#      coverage >= 90 % AND lesion coverage >= 90 % (a missed lesion fails).
 #
 # Run from the repo root:  python notebooks/step2_geom_init.py
 # FLOWSPLAT_VIEWS (default 60), FLOWSPLAT_CASES (default: first case of 5
-# validation patients).
+# validation patients), FLOWSPLAT_4DRGS_ITERS (default 10000).
 
 import marimo
 
@@ -57,6 +66,7 @@ def _(Path, mo, os, sys):
     from flowsplat import render_tigre as rt
 
     R2G_DIR = WORK / "external" / "r2_gaussian"
+    DRGS_DIR = WORK / "external" / "4DRGS"
     PACK = Path(os.environ.get("FLOWSPLAT_PACK", str(WORK / "data" / "step1_pack.zip")))
     DATA = WORK / "data" / "pack_v1"
     RENDER = WORK / "data" / "render_v1"
@@ -65,26 +75,38 @@ def _(Path, mo, os, sys):
     # Plan Step 2.1: static R2-Gaussian ("r2g"). Its DoD failed on Oct 4
     # (radius MAE 0.20 to 0.42 mm), so the plan's fallback "fdk" (FDK volume
     # skeleton) is the default.
+    # Oct 5 (Step 2.1 v2, approved plan deviation): "4drgs".
     INIT = os.environ.get("FLOWSPLAT_INIT", "fdk")
     DOD_MM = 0.2  # plan, Step 2.1 DoD
+    COV_MIN = 0.9  # v2 pass rule: vessel and lesion coverage (OURS, fixed Oct 5 before the run)
+    DRGS_ITERS = int(os.environ.get("FLOWSPLAT_4DRGS_ITERS", "10000"))
     print("views:", N_VIEWS, "| init:", INIT, "| out:", OUT)
-    return DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, OUT, PACK, R2G_DIR, RENDER, md, rt
+    return (COV_MIN, DATA, DOD_MM, DRGS_DIR, DRGS_ITERS, FLOWSPLAT_DIR, INIT, N_VIEWS, OUT, PACK, R2G_DIR,
+            RENDER, md, rt)
 
 
 @app.cell
-def _(FLOWSPLAT_DIR, R2G_DIR, os, subprocess, sys):
-    # a) extensions
-    def _ok():
-        return subprocess.run(
-            [sys.executable, "-c", "import torch, simple_knn._C, xray_gaussian_rasterization_voxelization, tigre"],
-            cwd="/", capture_output=True).returncode == 0
+def _(DRGS_DIR, FLOWSPLAT_DIR, INIT, R2G_DIR, os, subprocess, sys):
+    # a) extensions (4DRGS route: also tiny-cuda-nn, the 4DRGS rasterizers,
+    #    LEAP and the Python packages its train.py / test.py import)
+    _mods = "import torch, simple_knn._C, xray_gaussian_rasterization_voxelization, tigre"
+    if INIT == "4drgs":
+        _mods += (", tinycudann, diff_Xray_gaussian_rasterization_voxelization,"
+                  " diff_Xray_gaussian_rasterization_voxelization_legacy, leapctype, pyhocon, SimpleITK, mcubes, pymeshlab, open3d")
 
-    if not _ok() or not (R2G_DIR / "train.py").exists():
+    def _ok():
+        return subprocess.run([sys.executable, "-c", _mods], cwd="/", capture_output=True).returncode == 0
+
+    _repo = DRGS_DIR if INIT == "4drgs" else R2G_DIR
+    if not _ok() or not (_repo / "train.py").exists():
         print("Building extensions (step0_setup.py build-only).", flush=True)
+        _flags = ({"FLOWSPLAT_4DRGS_BUILD_ONLY": "1", "FLOWSPLAT_RUN_4DRGS": "1"} if INIT == "4drgs"
+                  else {"FLOWSPLAT_BUILD_ONLY": "1", "FLOWSPLAT_RUN_4DRGS": "0"})
         subprocess.run([sys.executable, "notebooks/step0_setup.py"], cwd=str(FLOWSPLAT_DIR),
-                       env=dict(os.environ, FLOWSPLAT_BUILD_ONLY="1", FLOWSPLAT_RUN_4DRGS="0"))
+                       env=dict(os.environ, **_flags))
     if not _ok():
-        raise RuntimeError("R2-Gaussian extensions not importable.")
+        _err = subprocess.run([sys.executable, "-c", _mods], cwd="/", capture_output=True, text=True).stderr
+        raise RuntimeError(f"Extensions not importable:\n{_err[-2000:]}")
     ext_ready = True
     return (ext_ready,)
 
@@ -119,10 +141,13 @@ def _(DATA, PACK, RENDER, ext_ready, json, np, os, rt, zipfile):
 
 
 @app.cell
-def _(CASES, DATA, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, json, md, np, subprocess, sys, time):
+def _(CASES, DATA, DRGS_DIR, DRGS_ITERS, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, json, md, np, subprocess, sys, time):
     # c) init volume per case, saved in the lumen frame:
     #    INIT=r2g: static R2-Gaussian (official scripts, defaults), plan Step 2.1
     #    INIT=fdk: TIGRE FDK (Hann) of the same views, plan Step 2.1 FALLBACK
+    #    INIT=4drgs: official 4DRGS, time-averaged VQR volume (Step 2.1 v2)
+    from flowsplat import setup_check as _sc
+
     runs = {}
     for _c in CASES:
         _base = OUT / f"{_c}_v{N_VIEWS}_{INIT}"
@@ -132,8 +157,41 @@ def _(CASES, DATA, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, json, md, np, subprocess
         _dev = []
         _t0 = time.time()
         _ev_dir = None
+        _drgs = None
         if INIT == "fdk":
             _lv, _ = md.fdk_volume_lumen_frame(RENDER / f"{_c}.npz", n_views=N_VIEWS)
+        elif INIT == "4drgs":
+            import SimpleITK as _sitk
+
+            _d, _m = _base / "data", _base / "model"
+            md.write_4drgs_case(RENDER / f"{_c}.npz", _d)
+            # number of FDK-masked init points (see md.fourdrgs_m1)
+            _fv, _ = md.fdk_volume_lumen_frame(RENDER / f"{_c}.npz", n_views=N_VIEWS)
+            _n_above = int((_fv * _meta["mu_per_mm"] > md.FOURDRGS_THRES_FDK).sum())
+            _m1 = md.fourdrgs_m1(_n_above)
+            if _m1 != md.FOURDRGS_M1:
+                _dev.append(f"4DRGS --M1 {_m1} instead of {md.FOURDRGS_M1} ({_n_above} FDK voxels above "
+                            f"{md.FOURDRGS_THRES_FDK})")
+            _common = [f"-m={_m}", f"-s={_d}", f"--Nviews={N_VIEWS}", f"--iteration={DRGS_ITERS}"]
+            _vq = _m / "train" / "VQR_output" / "vol_pred.nii.gz"
+            if _vq.exists():
+                _vq.unlink()
+            _tr = subprocess.run([sys.executable, "train.py", *_common, f"--ADC_until_iter={DRGS_ITERS // 2}",
+                                  "--fdk_toolbox=tigre", f"--M1={_m1}", "--save_iterations", str(DRGS_ITERS)],
+                                 cwd=str(DRGS_DIR))
+            if not _vq.exists():
+                raise RuntimeError(f"4DRGS train.py gave no VQR volume (exit {_tr.returncode})")
+            if _tr.returncode != 0:  # expected: mesh / ICP evaluation needs mesh_ref.obj
+                _dev.append("4DRGS train.py stopped in its mesh / ICP evaluation (no reference mesh); "
+                            "VQR volume written before it is used")
+            _lv = md.fourdrgs_volume_to_lumen_frame(_sitk.GetArrayFromImage(_sitk.ReadImage(str(_vq))),
+                                                    _meta["axis_perm"])
+            _te = subprocess.run([sys.executable, "test.py", *_common, "--render_2d"], cwd=str(DRGS_DIR),
+                                 capture_output=True, text=True)
+            _drgs = {"m1": _m1, "n_fdk_above": _n_above, "train_exit": _tr.returncode,
+                     **_sc.parse_4drgs_log(_te.stdout)}
+            if _te.returncode != 0:
+                _drgs["test_error"] = _te.stderr[-1500:]
         else:
             _d, _m = _base / "data", _base / "model"
             _info = md.write_r2g_case(RENDER / f"{_c}.npz", DATA / "cases" / f"{_c}.npz", DATA / "bolus" / f"{_c}.npz",
@@ -152,13 +210,13 @@ def _(CASES, DATA, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, json, md, np, subprocess
             _ev_dir = str(_m / "eval" / "iter_030000")
         np.save(_base / "vol_lumen.npy", _lv.astype(np.float32))
         runs[_c] = {"base": str(_base), "lumen": _lum, "minutes": round((time.time() - _t0) / 60, 1),
-                    "deviations": _dev, "eval_dir": _ev_dir}
+                    "deviations": _dev, "eval_dir": _ev_dir, "drgs": _drgs}
         print(_c, INIT, runs[_c]["minutes"], "min", flush=True)
     return (runs,)
 
 
 @app.cell
-def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, runs, time):
+def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, runs, time):
     # d) geometry from the static volume, radius error, tube Gaussians
     import matplotlib as _mpl
 
@@ -189,8 +247,10 @@ def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, run
         row = {"case": _c, "views": N_VIEWS, "init": INIT, **_err, **_cov, "alignment_loss_init": float(_tg.alignment_loss().item()),
                "n_gaussians": int(len(s_e)), "length_est_mm": float(s_e[-1]), "length_gt_mm": float(_case["s"][-1]),
                "stenosis_degree_gt": _p["stenosis_degree"], "r_min_gt_mm": _p["r_min_mm"],
-               "r2g_eval": _ev, "minutes": _r["minutes"], "deviations": _r["deviations"],
-               "pass": _err["mae_mm"] < DOD_MM}
+               "r2g_eval": _ev, "drgs": _r["drgs"], "minutes": _r["minutes"], "deviations": _r["deviations"],
+               "pass": _err["mae_mm"] < DOD_MM,
+               "pass_v2": bool(_err["mae_mm"] < DOD_MM and _cov["gt_coverage"] >= COV_MIN
+                               and _cov["lesion_coverage"] >= COV_MIN)}
         rows.append(row)
         _fig, _ax = _plt.subplots(1, 2, figsize=(14, 4))
         _ax[0].imshow(_lv.max(axis=2).T, origin="lower", cmap="gray")
@@ -215,6 +275,10 @@ def _(CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, json, md, np, run
         "mae_mm_per_case": {r["case"]: round(r["mae_mm"], 4) for r in rows},
         "mae_mm_mean": float(np.mean([r["mae_mm"] for r in rows])),
         "all_pass": all(r["pass"] for r in rows),
+        "cov_min": COV_MIN,
+        "all_pass_v2": all(r["pass_v2"] for r in rows),
+        "pass_v2_per_case": {r["case"]: r["pass_v2"] for r in rows},
+        "heldout_psnr_per_case": {r["case"]: (r["drgs"] or {}).get("psnr_eval") for r in rows},
         "gt_coverage_per_case": {r["case"]: round(r["gt_coverage"], 3) for r in rows},
         "lesion_coverage_per_case": {r["case"]: round(r["lesion_coverage"], 3) for r in rows},
         "throat_err_mm_per_case": {r["case"]: round(r["throat_err_mm"], 3) for r in rows},

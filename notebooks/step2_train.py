@@ -18,6 +18,10 @@
 # FLOWSPLAT_VIEWS = 60 (default) | 30;  FLOWSPLAT_CASES = comma list (overrides)
 # FLOWSPLAT_VARIANTS = comma list of base, frozen, pose, pose_arr (default: all;
 #   the Step 2.2 fallback variants, see train.VARIANTS)
+# FLOWSPLAT_INIT = fdk (default) | 4drgs: geometry init from the 4DRGS volume
+#   of Step 2.1 v2 (approved plan deviation, Oct 5), read from
+#   WORK/step2_1/<case>_v<views>_4drgs/vol_lumen.npy; run
+#   notebooks/step2_geom_init.py with FLOWSPLAT_INIT=4drgs first (same session)
 
 import marimo
 
@@ -63,9 +67,13 @@ def _(Path, mo, os, sys):
     # Fallback variants of the plan (train.VARIANTS); overfit runs all four.
     VARIANTS = tuple(os.environ.get("FLOWSPLAT_VARIANTS", ",".join(tr.VARIANTS)).split(","))
     N_VIEWS = int(os.environ.get("FLOWSPLAT_VIEWS", "60"))
+    INIT = os.environ.get("FLOWSPLAT_INIT", "fdk")
+    TAG = "" if INIT == "fdk" else f"_{INIT}"  # file names of the FDK runs unchanged
+    INIT_DIR = WORK / "step2_1"
     DOD_Q, DOD_DIAM_MM = 0.10, 0.2  # plan, Step 2.2 DoD
-    print("mode:", MODE, "| views:", N_VIEWS, "| variants:", VARIANTS)
-    return DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, VARIANTS, md, rt, tr
+    print("mode:", MODE, "| views:", N_VIEWS, "| variants:", VARIANTS, "| init:", INIT)
+    return (DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, INIT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, TAG,
+            VARIANTS, md, rt, tr)
 
 
 @app.cell
@@ -119,8 +127,8 @@ def _(DATA, MODE, PACK, RENDER, json, np, os, rt, tigre_ready, zipfile):
 
 
 @app.cell
-def _(CASES, DATA, N_VIEWS, OUT, RENDER, VARIANTS, json, md, np, rt, time, tr):
-    # c) fit every case with every requested variant (same FDK init per case)
+def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, TAG, VARIANTS, json, md, np, rt, time, tr):
+    # c) fit every case with every requested variant (same init per case)
     import torch
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -130,8 +138,15 @@ def _(CASES, DATA, N_VIEWS, OUT, RENDER, VARIANTS, json, md, np, rt, time, tr):
         _meta = json.loads(str(_z["meta"]))
         _case = np.load(DATA / "cases" / f"{_c}.npz")
         _idx = rt.view_subsets(len(_z["angles_deg"]), (N_VIEWS,))[str(N_VIEWS)]["train"]
-        # Step 2.1 final init: FDK of the same training views, half-max radius
-        _vol, _ = md.fdk_volume_lumen_frame(RENDER / f"{_c}.npz", n_views=N_VIEWS)
+        # Step 2.1 init volume, then the same centerline and half-max radius:
+        # fdk: FDK of the same training views; 4drgs: Step 2.1 v2 volume
+        if INIT == "4drgs":
+            _vf = INIT_DIR / f"{_c}_v{N_VIEWS}_4drgs" / "vol_lumen.npy"
+            if not _vf.exists():
+                raise FileNotFoundError(f"{_vf}: run notebooks/step2_geom_init.py with FLOWSPLAT_INIT=4drgs first")
+            _vol = np.load(_vf)
+        else:
+            _vol, _ = md.fdk_volume_lumen_frame(RENDER / f"{_c}.npz", n_views=N_VIEWS)
         _s, _xyz_l, _r = md.build_from_volume(_vol, _meta["lumen"]["vox_mm"], _meta["lumen"]["origin_mm"])
         _world, _ = md.lumen_to_world(_xyz_l, _meta["lumen"], _meta["axis_perm"])
         _proj = torch.tensor(_z["proj"][_idx].astype(np.float32), device=device)
@@ -145,12 +160,12 @@ def _(CASES, DATA, N_VIEWS, OUT, RENDER, VARIANTS, json, md, np, rt, time, tr):
             _est = _m.estimates()
             _ev = tr.evaluate(_est, _case, _meta["lumen"], _meta["axis_perm"])
             _ev["q_rel_err_stage_a"] = abs(_info["q_after_stage_a"] / 1000 - _ev["q_gt_mls"]) / _ev["q_gt_mls"]
-            _d = OUT / f"{_c}_v{N_VIEWS}_{_v}"
+            _d = OUT / f"{_c}_v{N_VIEWS}{TAG}_{_v}"
             _d.mkdir(parents=True, exist_ok=True)
             np.savez(_d / "estimate.npz", radius_mm=_est["radius_mm"], position_world_mm=_est["position_world_mm"],
                      init_s=_s, init_xyz_lumen=_xyz_l, init_r=_r)
             (_d / "history.json").write_text(json.dumps(_info["history"]))
-            results[f"{_c}|{_v}"] = {**_ev, "case": _c, "variant": _v, "direction": _info["direction"],
+            results[f"{_c}|{_v}"] = {**_ev, "case": _c, "variant": _v, "init": INIT, "direction": _info["direction"],
                                      "minutes": round((time.time() - _t0) / 60, 2),
                                      **{k: v for k, v in _est.items() if k not in ("radius_mm", "position_world_mm")}}
             print(_c, _v, json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in results[f"{_c}|{_v}"].items()}), flush=True)
@@ -158,7 +173,7 @@ def _(CASES, DATA, N_VIEWS, OUT, RENDER, VARIANTS, json, md, np, rt, time, tr):
 
 
 @app.cell
-def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, RENDER, VARIANTS, json, md, np, results, time):
+def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, MODE, N_VIEWS, OUT, RENDER, TAG, VARIANTS, json, md, np, results, time):
     # d) summary per variant and figures per case (all variants in one plot)
     import matplotlib as _mpl
 
@@ -188,12 +203,12 @@ def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, RENDER, VARIA
         }
     summary = {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "mode": MODE, "views": N_VIEWS, "variants": list(VARIANTS),
+        "mode": MODE, "views": N_VIEWS, "variants": list(VARIANTS), "init": INIT,
         "dod_rule": "mean Q relative error < 10 % and mean stenosis diameter error < 0.2 mm over the cases (per-case fractions reported too)",
         "per_variant": per_variant,
         "cases": results,
     }
-    (_res / f"step2.2_{MODE}_v{N_VIEWS}.json").write_text(json.dumps(summary, indent=2, default=str))
+    (_res / f"step2.2_{MODE}_v{N_VIEWS}{TAG}.json").write_text(json.dumps(summary, indent=2, default=str))
     for _c in sorted({r["case"] for r in results.values()}):
         _meta = json.loads(str(np.load(RENDER / f"{_c}.npz")["meta"]))
         _case = np.load(DATA / "cases" / f"{_c}.npz")
@@ -203,9 +218,9 @@ def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, RENDER, VARIA
         _ax.plot(_case["s"], _case["r_mm"], color="k", lw=1.5, label="ground truth")
         _first = True
         for _v in VARIANTS:
-            _e = np.load(OUT / f"{_c}_v{N_VIEWS}_{_v}" / "estimate.npz")
+            _e = np.load(OUT / f"{_c}_v{N_VIEWS}{TAG}_{_v}" / "estimate.npz")
             if _first:
-                _ax.plot(_case["s"][_tree.query(_e["init_xyz_lumen"])[1]], _e["init_r"], ".", ms=2, color="0.6", label="init (FDK)")
+                _ax.plot(_case["s"][_tree.query(_e["init_xyz_lumen"])[1]], _e["init_r"], ".", ms=2, color="0.6", label=f"init ({INIT})")
                 _first = False
             _xyz = md.world_to_lumen(_e["position_world_mm"], _meta["lumen"], _meta["axis_perm"])
             _r = results[f"{_c}|{_v}"]
@@ -217,7 +232,7 @@ def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, MODE, N_VIEWS, OUT, RENDER, VARIA
         _ax.set_title(_c)
         _ax.legend(fontsize=8)
         _fig.tight_layout()
-        _fig.savefig(_res / f"step2.2_{_c}_v{N_VIEWS}.png", dpi=80)
+        _fig.savefig(_res / f"step2.2_{_c}_v{N_VIEWS}{TAG}.png", dpi=80)
         _plt.close(_fig)
     print(json.dumps({k: v for k, v in summary.items() if k != "cases"}, indent=2))
     return
