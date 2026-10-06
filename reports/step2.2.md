@@ -113,6 +113,24 @@ iterations): pose: Q error 4.5 % (Stage A 6.1 %), Q stable during Stage B
 0.068 mm. base: Q error 28 %, radius MAE 0.26 mm: with the radius free the
 Gaussian-profile bias remains (separate from the bug).
 
+### Run 3: variants on the same 5 cases after the fix, Oct 5, repo `3156009`
+
+`results/step2.2_variants5_v60_run3_fixed.json`, figures `..._run3_fixed.png`.
+
+| Variant | Mean Q error (max) | Q below 10 % | Mean / median diameter error | Diameter below 0.2 mm | Radius MAE |
+|---|---|---|---|---|---|
+| **pose_arr** | **4.4 %** (7.3 %) | **5 / 5** | 0.63 / 0.34 mm | 2 / 5 | 0.09 mm |
+| pose | 4.5 % (11.0 %) | 4 / 5 | 0.63 / 0.34 mm | 2 / 5 | 0.09 mm |
+| frozen | 3.8 % (6.1 %) | 5 / 5 | 0.36 / 0.21 mm (4 cases) | 2 / 4 | 0.07 mm |
+| base | 24 % (52 %) | 2 / 5 | 0.88 / 0.75 mm | 0 / 5 | 0.46 mm |
+
+Per case (pose_arr): Q error 3.4 / 7.3 / 4.4 / 3.8 / 3.0 % and diameter
+error 0.071 / 0.953 / 0.342 / 1.716 / 0.064 mm for 121_0 / 122_0 / 130_0 /
+131_0 / 135_0. Q is stable in Stage B after the fix. The diameter is set by
+the FDK init: 122_0 (init throat 0.48 mm too small) and 131_0 (lesion
+missing from the init; the lesion window matches Gaussians at the end of
+the chain) fail.
+
 Pre-specified before the 20-case run: primary variant **pose_arr** (both
 parts of the fallback: geometry radius kept frozen, positions refined,
 arrival-time loss); frozen and pose reported as ablations; base reported as
