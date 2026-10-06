@@ -1,8 +1,8 @@
 # Step 2.2: Transport layer and joint optimization
 
-Dates: Oct 14 to Oct 19, 2026 (started Oct 4). Status: **in progress**:
-transport layer, projector and training code done and tested on the M4;
-molab runs pending (overfit one case, then 20 validation cases).
+Dates: Oct 14 to Oct 19, 2026 (run Oct 4 to 5). Status: **finished, DoD
+partly met**: Q met, stenosis diameter not met; plan fallback applied
+(all clauses); outcome goes to Gate 1 (Oct 20).
 
 Plan DoD: "On 20 validation cases: Q relative error below 10 % and stenosis
 diameter error below 0.2 mm (30 or 60 views)." Interpreted as the mean over
@@ -136,11 +136,89 @@ parts of the fallback: geometry radius kept frozen, positions refined,
 arrival-time loss); frozen and pose reported as ablations; base reported as
 the failed plan route.
 
+### Run 4 (DoD run): 20 validation cases, 60 views, Oct 5, repo `75fada9`
+
+`results/step2.2_val20_v60.json`, figures `results/step2.2_val20_figs/`
+(each shows ground truth, FDK init and the four variants). Cases: the 20
+first validation cases ordered by stenosis index then patient (all 6
+validation patients). 0.6 to 2.1 min per case and variant on the GPU.
+
+| Variant | Mean Q error | Median | Max | Q below 10 % | Mean diameter error | Median | Diameter below 0.2 mm | Lesion found | Radius MAE |
+|---|---|---|---|---|---|---|---|---|---|
+| **pose_arr (primary, pre-specified)** | **5.2 %** | 3.6 % | 30.9 % | 17 / 20 | **0.36 mm** | 0.12 mm | 10 / 19 | 19 / 20 | 0.09 mm |
+| pose | 4.8 % | 4.2 % | 11.0 % | 17 / 20 | 0.47 mm | 0.21 mm | 10 / 20 | 20 / 20 | 0.09 mm |
+| frozen | 4.1 % | 3.5 % | 10.5 % | 19 / 20 | 0.26 mm | 0.09 mm | 10 / 16 | 16 / 20 | 0.07 mm |
+| base (plan route) | 36.7 % | 43.5 % | 64.0 % | 3 / 20 | 0.98 mm | 1.03 mm | 0 / 19 | 19 / 20 | 0.52 mm |
+
+Per case, Q error / stenosis diameter error (mm):
+
+| Case | pose_arr | pose | frozen | base |
+|---|---|---|---|---|
+| 121_0 | 3.4 % / 0.07 | 5.1 % / 0.07 | 6.1 % / 0.07 | 21.5 % / 1.41 |
+| 122_0 | 7.3 % / 0.95 | 1.2 % / 0.95 | 0.3 % / 0.95 | 5.4 % / 0.48 |
+| 130_0 | 4.4 % / 0.34 | 0.7 % / 0.34 | 1.1 % / 0.34 | 2.9 % / 0.72 |
+| 131_0 | 3.8 % / 1.72 | 11.0 % / 1.72 | 5.9 % / - | 52.3 % / 0.75 |
+| 135_0 | 3.0 % / 0.06 | 4.4 % / 0.06 | 5.7 % / 0.06 | 39.6 % / 1.03 |
+| 667_0 | 0.2 % / - | 9.5 % / 2.60 | 2.9 % / - | 46.6 % / - |
+| 121_1 | 3.3 % / 0.07 | 6.2 % / 0.07 | 6.6 % / 0.07 | 14.1 % / 0.37 |
+| 122_1 | 0.4 % / 0.10 | 4.4 % / 0.10 | 3.2 % / 0.10 | 25.3 % / 1.25 |
+| 130_1 | 5.8 % / 0.06 | 6.2 % / 0.06 | 6.8 % / 0.06 | 36.4 % / 0.47 |
+| 131_1 | 30.9 % / 0.76 | 10.5 % / 0.76 | 6.6 % / 0.76 | 64.0 % / 1.55 |
+| 135_1 | 2.3 % / 0.30 | 2.4 % / 0.30 | 2.1 % / 0.30 | 46.6 % / 0.55 |
+| 667_1 | 10.7 % / 0.02 | 2.7 % / 0.02 | 10.5 % / 0.02 | 52.2 % / 1.31 |
+| 121_2 | 3.9 % / 0.07 | 3.5 % / 0.07 | 4.5 % / 0.07 | 23.8 % / 0.81 |
+| 122_2 | 1.2 % / 0.46 | 6.4 % / 0.46 | 1.1 % / - | 60.8 % / 1.06 |
+| 130_2 | 10.9 % / 0.50 | 0.2 % / 0.50 | 3.7 % / - | 53.9 % / 0.59 |
+| 131_2 | 0.8 % / 0.58 | 11.0 % / 0.58 | 7.8 % / 0.58 | 46.3 % / 1.41 |
+| 135_2 | 4.7 % / 0.03 | 3.2 % / 0.03 | 3.3 % / 0.03 | 52.1 % / 1.66 |
+| 667_2 | 4.7 % / 0.06 | 3.3 % / 0.06 | 2.6 % / 0.06 | 40.8 % / 0.46 |
+| 121_3 | 1.4 % / 0.53 | 0.5 % / 0.53 | 0.3 % / 0.53 | 0.4 % / 1.51 |
+| 122_3 | 1.8 % / 0.12 | 4.1 % / 0.12 | 1.7 % / 0.12 | 48.1 % / 1.29 |
+
+Observations:
+
+- **Q is recovered**: mean 5.2 % (primary), 4.1 % with the geometry fully
+  frozen. Stage A alone gives 4.1 % on average; Stage B with pose updates
+  does not improve Q on average.
+- **The stenosis diameter is set by the Step 2.1 FDK init**: the diameter
+  errors of pose_arr, pose and frozen are identical case by case (the radius
+  is frozen in all three; they differ only in which Gaussians fall inside
+  the lesion window). Cases with a good init throat pass (0.02 to 0.12 mm);
+  cases with a poor init fail (122_0 0.95 mm, 131_0 1.72 mm with the lesion
+  missing from the init, 130_2 0.50 mm, 121_3 0.53 mm).
+- **Freeing the radius (base) makes it worse**: Q 37 %, diameter 0.98 mm,
+  radius MAE 0.52 mm: the Gaussian cross-section with free amplitude is
+  biased thin against the flat-topped lumen.
+- **Failures in Q**: 131_1 (30.9 %; patient 131 has its dim proximal third
+  missing from the init, as in Step 2.1), 667_1 and 130_2 (10.7 and 10.9 %).
+
 ## DoD
 
-| DoD part | Met |
-|---|---|
-| 20 val cases: Q relative error < 10 % | TODO |
-| 20 val cases: stenosis diameter error < 0.2 mm | TODO |
+| DoD part | Result (pose_arr, 20 val cases, 60 views) | Met |
+|---|---|---|
+| Q relative error < 10 % | mean 5.2 % (median 3.6 %, 17 / 20 below 10 %) | **Yes** |
+| Stenosis diameter error < 0.2 mm | mean 0.36 mm (median 0.12 mm, 10 / 19 below 0.2 mm) | **No** |
 
-**DoD met: no (in progress). Fallback used: yes (keep geometry frozen longer, add arrival-time loss), variant comparison pending.**
+DoD rule as interpreted: mean over the 20 cases (interpretation ours, to
+confirm). With the median, the diameter would pass (0.12 mm) and Q would
+pass; per case, 10 of 19 pass the diameter.
+
+**DoD met: no (Q yes, stenosis diameter no). Fallback used: yes.** Plan,
+Step 2.2 Fallback: "Q does not converge: grid search over Q, then
+fine-tune. Geometry/flow ambiguity: keep geometry frozen longer, add
+arrival-time loss. 30 views insufficient: use 60 and report error vs views
+as a result." Q converges (first clause not needed); the second clause is
+applied (pose_arr); 60 views are used (third clause). All applicable
+clauses of the fallback are used, and the diameter part still fails.
+Rule 2: no further method change before the Oct 20 gate review.
+
+## For the Gate 1 review (Oct 20)
+
+- Gate 1 condition (plan): "Q error < 10 % on single vessel?" Result: mean
+  5.2 % (primary), 4.1 % (frozen); 17 to 19 of 20 cases below 10 %.
+- Not met: stenosis diameter (mean 0.36 mm vs 0.2 mm), limited by the FDK
+  init at the throat and by the thin bias of free Gaussian radii. Relevant
+  for Step 3.1 (FFR depends on the throat area to the fourth power through
+  Young-Tsai).
+- Known weak patient: 131 (init misses the inlet third).
+- 30-view results not run yet (DoD allows 30 or 60).

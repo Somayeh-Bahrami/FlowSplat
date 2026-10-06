@@ -1,0 +1,38 @@
+% Step 2.2: transport layer and optimization.
+% Numbers from results/step2.2_val20_v60.json (20 validation cases, 60 views).
+% Bib keys: zha2024r2gaussian, liu2025fourdrgs, thakur2026punch.
+
+\paragraph{Transport-constrained Gaussians.}
+Each tube Gaussian $i$ carries a fixed arc length $s_i$ assigned at
+initialization. Instead of a free time-varying density as in
+4DRGS~\cite{liu2025fourdrgs}, its contrast follows plug-flow transport,
+$c_i(t) = C_{\mathrm{in}}(t - \tau_i)$ with
+$\tau_i = \int_0^{s_i} A(s)/Q\,\mathrm{d}s$ and $A = 2\pi\sigma^2$,
+which is the advection limit of the transport equation used by
+PUNCH~\cite{thakur2026punch} at its high P\'eclet numbers. The inlet
+$C_{\mathrm{in}}$ is a gamma-variate with unknown arrival, shape, scale
+and amplitude, and $Q$ is a single scalar per vessel. The peak density of
+Gaussian $i$ is normalized so that the chain forms a lumen of area $A$
+filled with attenuation proportional to $c$. Each projection is the sum
+of the exact line integrals of all Gaussians along the detector rays, the
+rendering model of R$^2$-Gaussian~\cite{zha2024r2gaussian}, evaluated at the
+acquisition time of that view.
+
+\paragraph{Optimization.}
+Starting from the FDK initialization, we first determine the inlet end of
+the vessel by a short fit in both directions, then fit $Q$ and the inlet
+curve with the geometry frozen, and finally refine the Gaussian positions
+and orientations jointly with the flow, using the L1 and D-SSIM loss of
+4DRGS~\cite{liu2025fourdrgs} plus an arrival-time term that compares the
+modelled arrival $t_0 + \tau_i$ with the half-peak time measured at each
+Gaussian's footprint. Radii are kept at their initialization: when they
+are free, a Gaussian cross-section fitted to the flat-topped lumen profile
+becomes systematically narrower, which biases both the area and the flow.
+
+\paragraph{Single-vessel validation.}
+On 20 validation cases with 60 views, the volumetric flow is recovered
+with a mean relative error of 5.2\,\% (median 3.6\,\%), with 17 of 20
+cases below 10\,\%. Freezing the whole geometry gives 4.1\,\%. The
+stenosis diameter, inherited from the initialization, has a median error
+of 0.12\,mm but a mean of 0.36\,mm, driven by cases whose initial throat
+is poorly resolved.
