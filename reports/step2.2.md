@@ -192,6 +192,35 @@ Observations:
 - **Failures in Q**: 131_1 (30.9 %; patient 131 has its dim proximal third
   missing from the init, as in Step 2.1), 667_1 and 130_2 (10.7 and 10.9 %).
 
+### Run 5: 4DRGS init (Step 2.1 v2), same 5 cases, Oct 5, repo `dc10e28`
+
+Plan deviation approved by the user on Oct 5 (see reports/step2.1.md,
+Step 2.1 v2). Variants frozen and pose_arr, 60 views; compared with run 3
+(FDK init, same cases, same code).
+
+| Case | Q err frozen (4DRGS / FDK) | Q err pose_arr (4DRGS / FDK) | Diam. err (4DRGS / FDK pose_arr, mm) | Init area / GT (4DRGS / FDK) | Q est / GT (frozen, 4DRGS) |
+|---|---|---|---|---|---|
+| 121_0 | 12.6 % / 6.1 % | 10.8 % / 3.4 % | 0.096 / 0.071 | 0.887 / 0.949 | 0.875 |
+| 122_0 | 18.6 % / 0.3 % | 14.5 % / 7.4 % | 0.126 / 0.953 | 0.810 / 0.944 | 0.814 |
+| 130_0 | 15.4 % / 1.1 % | 10.0 % / 4.4 % | 0.159 / 0.342 | 0.854 / 0.940 | 0.847 |
+| 131_0 | 9.4 % / 5.9 % | 8.5 % / 3.8 % | 0.081 / 1.716 | 0.894 / 0.952 | 0.906 |
+| 135_0 | 9.2 % / 5.7 % | 8.7 % / 3.0 % | 0.030 / 0.064 | 0.910 / 0.953 | 0.908 |
+| **Mean** | **13.0 % / 3.8 %** | **10.5 % / 4.4 %** | **0.098 / 0.629** | | |
+
+- Stenosis diameter: 5 / 5 below 0.2 mm (mean 0.098 mm), lesion found on
+  every case including 131_0. This part of the DoD now passes.
+- Q: worse. Every case is underestimated, and Q_est / Q_gt matches the init
+  lumen area ratio to within 0.015 on all 5 cases (frozen). Since
+  tau = int A / Q ds is fitted from the arrival times, a too small A gives a
+  proportionally too small Q (plan: Q from A = 2 pi sigma^2). The
+  half-max radius on the 4DRGS volume is biased low by 0.075 to 0.15 mm,
+  i.e. 9 to 19 % in area. With FDK the area bias was about 5 %, and Q was
+  within 10 %.
+- Consequence: the Q part of the DoD needs the lumen area within about
+  10 %, i.e. a radius bias below about 5 % (0.07 mm for R = 1.4 mm). The
+  two inits fail opposite halves of the DoD for the same reason (radius
+  error), at the throat for FDK and along the whole vessel for 4DRGS.
+
 ## DoD
 
 | DoD part | Result (pose_arr, 20 val cases, 60 views) | Met |

@@ -202,4 +202,28 @@ Step 2.2. Static R2-Gaussian is not re-tried: it already failed (run 1).
 - Caveat for the paper: 4DRGS is also baseline 1 (Step 4.1). Using it as
   the initializer must be stated in the method section.
 
-Results: pending (molab).
+### Results: run 5, 4DRGS init, Oct 5 (molab, repo `dc10e28`), 60 views
+
+4DRGS training: 1 min 31 s to 1 min 42 s per case (10k iterations), default
+M1 = 30000 on every case (84521 to 105133 FDK voxels above 0.016). As
+expected, train.py exits in its mesh / ICP evaluation (no reference mesh);
+the VQR volume is written before that and is used.
+
+| Case | Radius MAE (mm) | Bias (mm) | Vessel cov. | Lesion cov. | Throat err. (mm) | Held-out PSNR (dB) | Pass v2 |
+|---|---|---|---|---|---|---|---|
+| 121_0 | 0.089 | -0.089 | 99.3 % | 100 % | -0.048 | 38.00 | yes |
+| 122_0 | 0.151 | -0.151 | 100 % | 100 % | -0.063 | 34.81 | yes |
+| 130_0 | 0.125 | -0.125 | 99.7 % | 100 % | -0.080 | 32.57 | yes |
+| 131_0 | 0.096 | -0.094 | 98.6 % | 100 % | +0.040 | 34.51 | yes |
+| 135_0 | 0.075 | -0.075 | 99.6 % | 100 % | +0.015 | 37.95 | yes |
+
+Compared with the FDK init (run 4): lesion coverage of 131_0 goes from 0 %
+to 100 % (vessel 67 % -> 98.6 %), the 122_0 throat error from -0.48 mm to
+-0.06 mm, and estimated lengths now match GT within 2.5 mm (FDK: 3.5 to
+11 mm too long). The radius MAE is slightly higher than FDK (mean 0.107 vs
+0.076 mm) and is almost entirely a uniform negative bias (MAE = |bias|):
+the half-max radius on the 4DRGS volume is 0.075 to 0.151 mm too small, so
+the lumen area is 9 to 19 % too small (FDK: about 5 %).
+
+**Step 2.1 v2: pass on all 5 cases under the stricter rule (and the plan
+DoD).** The area bias matters for Q, see reports/step2.2.md run 5.
