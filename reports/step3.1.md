@@ -59,5 +59,26 @@ ground-truth radius of all 200 cases with the true hyperemic flow: FFR MAE
 
 ## Sweeps
 
-Pending (molab, notebooks/step3_sweeps.py). Settings and levels:
-flowsplat.sweeps.SETTINGS.
+Settings and levels: flowsplat.sweeps.SETTINGS; table: results/step3.1_sweeps.json
+(sweeps.collect). Run 8 (60 views) is the middle level.
+
+### Views (20 validation cases)
+
+| Views | k (median, 15 train) | Q err mean (median) | Q < 10 % | Q signed | Diam. err mean | Diam. < 0.2 mm | FFR MAE / acc. (case CFR) | FFR MAE / acc. (pop. CFR) |
+|---|---|---|---|---|---|---|---|---|
+| 30 | 1.126 | 7.8 % (6.9 %) | 12 / 20 | +5.8 % | 0.171 mm | 15 / 20 | 0.063 / 85 % | 0.113 / 75 % |
+| 60 (run 8) | 1.086 | 5.3 % (4.3 %) | 19 / 20 | +3.0 % | 0.104 mm | 16 / 20 | 0.030 / 90 % | 0.079 / 85 % |
+| 133 | | pending | | | | | | |
+
+30 views (Oct 7, molab, repo `fbead1b`, results/step2.2_val20_v30_4drgs_cal.json):
+- Step 2.2 DoD (means) also met at 30 views: Q 7.8 %, diameter 0.171 mm.
+- The 4DRGS radius bias is larger with fewer views (training area ratio
+  median 0.79 vs 0.85 at 60 views, k 1.126 vs 1.086); the per-view-count
+  calibration absorbs it.
+- 4DRGS geometry at 30 views: lesion coverage 100 % on all 20, 3 cases fail
+  the v2 radius rule (130_1, 130_2, 131_1, MAE 0.22 to 0.27 mm); training: 10
+  of 15 pass.
+- FFR doubles in error (0.063) and the same lesion-geometry pattern holds:
+  true lesion + estimated Q 0.019, estimated lesion + true Q 0.073. Largest
+  FFR errors: 130_0 (0.577 -> 0.334), 130_1 (0.873 -> 0.636), 131_1
+  (0.962 -> 0.782), 135_0 (0.605 -> 0.794).

@@ -256,6 +256,17 @@ def collect(results_dir, settings=None):
     if base.exists():
         table["base_v60_val20"] = summarize(base)
         table["base_v60_val5"] = summarize(base, VAL5)
+        # run 8 predates FFR inside the results; FFR of run 8 computed on the
+        # M4 from its estimates (results/step3.1_ffr_val20_v60.json)
+        f8 = res / "step3.1_ffr_val20_v60.json"
+        if f8.exists():
+            from flowsplat import metrics as mt
+
+            rows = json.loads(f8.read_text())["cases"]
+            for name, cs in (("base_v60_val20", None), ("base_v60_val5", VAL5)):
+                rr = [r for r in rows if cs is None or r["case"] in cs]
+                for k in ("ffr_est", "ffr_est_pop_cfr"):
+                    table[name][k] = mt.ffr_summary(rr, k)
     for s in settings or SETTINGS:
         f = res / result_name(s)
         if f.exists():
