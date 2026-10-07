@@ -1,7 +1,14 @@
 # Step 2.1: Geometry initialisation and tube-aligned Gaussians
 
-Dates: Oct 12 to Oct 14, 2026 (done early, Oct 4). Status: **done, DoD met
-with the plan's fallback** (FDK volume skeleton), one documented limitation.
+Dates: Oct 12 to Oct 14, 2026 (done early, Oct 4 to 6). Status: **closed.**
+
+**Final method (Gate 1, Oct 6): 4DRGS init (Step 2.1 v2) + radius x k,
+k = 1.086 from 15 training cases (median rule).** On the 20 validation
+cases: lesion coverage 100 %, vessel coverage >= 97 %, radius MAE 0.056 to
+0.197 mm before calibration, 0.071 mm after (Step 2.2 run 8). History:
+run 1 static R2-Gaussian (failed), runs 2 to 4 FDK fallback (DoD met, but
+131_0 lesion missing), v2 4DRGS (approved plan deviation, Oct 5), radius
+calibration (Oct 6). Sections below are in chronological order.
 
 Plan DoD: "Lumen radius error below 0.2 mm on 5 validation cases."
 
@@ -10,8 +17,8 @@ Plan DoD: "Lumen radius error below 0.2 mm on 5 validation cases."
 | Piece | Runs on |
 |---|---|
 | `src/flowsplat/model.py` | M4 tests; molab |
-| `notebooks/step2_geom_init.py` (R2-Gaussian training) | molab GPU |
-| `tests/test_model.py` | M4 (CPU); whole suite 60 tests pass |
+| `notebooks/step2_geom_init.py` (R2-Gaussian, FDK or 4DRGS init) | molab GPU |
+| `tests/test_model.py` | M4 (CPU); whole suite 83 tests pass (Oct 6) |
 
 ## What was done
 

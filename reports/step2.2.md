@@ -1,8 +1,10 @@
 # Step 2.2: Transport layer and joint optimization
 
-Dates: Oct 14 to Oct 19, 2026 (run Oct 4 to 5). Status: **finished, DoD
-partly met**: Q met, stenosis diameter not met; plan fallback applied
-(all clauses); outcome goes to Gate 1 (Oct 20).
+Dates: Oct 14 to Oct 19, 2026 (run Oct 4 to 6). Status: **closed, DoD
+met** with the Gate 1 method (run 8): 4DRGS init + calibrated radius,
+variant frozen; Q 5.3 %, stenosis diameter 0.104 mm on 20 validation cases,
+60 views. Runs 1 to 7 below are the history (FDK init: Q met, diameter not
+met; 4DRGS without and with a first calibration).
 
 Plan DoD: "On 20 validation cases: Q relative error below 10 % and stenosis
 diameter error below 0.2 mm (30 or 60 views)." Interpreted as the mean over
@@ -15,7 +17,7 @@ to confirm).
 |---|---|
 | `src/flowsplat/transport.py`, `train.py`, `model.py:ConeProjector` | M4 (tests, prototype) and molab |
 | `notebooks/step2_train.py` | molab GPU |
-| `tests/test_transport_train.py` | M4; whole suite 76 tests pass |
+| `tests/test_transport_train.py` | M4; whole suite 83 tests pass (Oct 6) |
 
 ## What was done
 
