@@ -132,3 +132,35 @@ at the two sweep levels; PUNCH's reported value of about 4000 lies between.)
   135_0 (throat errors of 0.1 mm); FFR MAE differences between these
   settings are within that variation.
 
+### Flow speed and foreshortening (5 validation cases, 60 views, k = 1.086)
+
+Oct 7, molab, repo `8e64d89`.
+
+| Setting | Q err mean (median) | Q < 10 % | Diam. err mean | FFR MAE / acc. (case CFR) | FFR lesion misplaced |
+|---|---|---|---|---|---|
+| rest velocity 0.10 m/s | 3.3 % (1.8 %) | 5 / 5 | 0.145 mm | 0.048 / 100 % | 0 |
+| default (run 8, 0.10 to 0.20 m/s) | 4.4 % | 5 / 5 | 0.083 mm | 0.060 / 80 % | 0 |
+| rest velocity 0.25 m/s | 4.4 % (3.3 %) | 5 / 5 | 0.058 mm | (not valid, see below) | 0 |
+| rest velocity 0.40 m/s | 6.3 % (5.4 %) | 4 / 5 | 0.139 mm | (not valid) | 0 |
+| out-of-plane 0 deg | 4.5 % | 5 / 5 | 0.118 mm | 0.081 / 80 % | 0 |
+| out-of-plane 30 deg | 1.7 % | 5 / 5 | 0.053 mm | 0.040 / 100 % | 0 |
+| out-of-plane 60 deg | 4.9 % | 4 / 5 | 0.148 mm | 0.531 / 80 % (0.073 without 135_0) | 1 |
+
+- **Flow speed: robust.** Q error 3.3 to 6.3 % from slow rest to
+  hyperemia-like velocity (0.40 m/s: transit about 0.3 s, about 4 view
+  intervals at 60 views). Slightly larger at 0.40 m/s, consistent with
+  fewer views per transit (plan risk "temporal sampling").
+- **FFR is not evaluated for the 0.25 and 0.40 m/s levels**: the
+  ground-truth FFR is unphysical there (Young-Tsai at CFR x 0.25 to 0.40
+  m/s gives FFR <= 0 for the severe lesions, e.g. 135_0 -1.40), as stated
+  in sweeps.with_flow (FFR_MIN of data_gen not enforced in the sweep).
+- **Foreshortening: Q robust** (1.7 to 4.9 %), as expected for a 3D method
+  (the reconstruction sees the vessel from 198 deg of views; the angle only
+  matters for 2D methods, Step 4.1 baseline 2).
+- **fore_60, 135_0:** the GT-free lesion finder picked a false narrowing
+  24.7 mm from the true throat (estimated R 0.40 mm), FFR -1.76. Q and the
+  diameter in the true lesion window are fine. The new column "FFR lesion
+  misplaced" (throat found > 5 mm from the true throat) counts these: 1 in
+  fore_60, 1 each at 30 and 133 views (122_2 16.8 mm, 121_3 14.9 mm), 0
+  elsewhere, 0 in run 8.
+

@@ -228,6 +228,9 @@ def result_name(setting):
     return f"step2.2_sweep_v60_4drgs_cal_{setting}.json"
 
 
+LESION_TOL_MM = 5.0  # OURS: half of a typical lesion length (data_gen 5 to 15 mm)
+
+
 def summarize(result_json, cases=None, variant="frozen"):
     """Q, diameter and FFR summaries of one Step 2.2 results file, optionally
     restricted to a case list. Ref: OURS (reporting)."""
@@ -244,6 +247,11 @@ def summarize(result_json, cases=None, variant="frozen"):
         rr = [r for r in rows if k in r]
         if rr:
             out[k] = mt.ffr_summary(rr, k)
+    # FFR lesion found more than LESION_TOL_MM from the true throat (the
+    # diameter metric does not see this: it uses the ground-truth window)
+    td = [r["throat_dist_mm"] for r in rows if r.get("throat_dist_mm") is not None]
+    if td:
+        out["ffr_lesion_misplaced"] = int(np.sum(np.array(td) > LESION_TOL_MM))
     return out
 
 
@@ -267,6 +275,7 @@ def collect(results_dir, settings=None):
                 rr = [r for r in rows if cs is None or r["case"] in cs]
                 for k in ("ffr_est", "ffr_est_pop_cfr"):
                     table[name][k] = mt.ffr_summary(rr, k)
+                table[name]["ffr_lesion_misplaced"] = int(sum(r["throat_dist_mm"] > LESION_TOL_MM for r in rr))
     for s in settings or SETTINGS:
         f = res / result_name(s)
         if f.exists():
