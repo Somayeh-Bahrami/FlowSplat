@@ -72,8 +72,32 @@ def _(Path, mo, os, sys):
 
 
 @app.cell
-def _(DATA, PACK, zipfile):
+def _(FLOWSPLAT_DIR, os, subprocess, sys):
+    # extensions first: the sweep renders (TIGRE) run in this process before
+    # any Step 2 notebook could build them (fresh session, Oct 7:
+    # "No module named 'tigre.utilities'")
+    _mods = ("import torch, tigre.utilities, simple_knn._C, tinycudann, diff_Xray_gaussian_rasterization_voxelization,"
+             " leapctype, pyhocon, SimpleITK, mcubes, pymeshlab, open3d")
+
+    def _ok():
+        return subprocess.run([sys.executable, "-c", _mods], cwd="/", capture_output=True).returncode == 0
+
+    if not _ok():
+        print("Building extensions (step0_setup.py, 4DRGS build only).", flush=True)
+        _env = {k: v for k, v in os.environ.items() if not k.startswith("FLOWSPLAT_") or k == "FLOWSPLAT_WORK"}
+        subprocess.run([sys.executable, "notebooks/step0_setup.py"], cwd=str(FLOWSPLAT_DIR),
+                       env={**_env, "FLOWSPLAT_4DRGS_BUILD_ONLY": "1", "FLOWSPLAT_RUN_4DRGS": "1"})
+    if not _ok():
+        _err = subprocess.run([sys.executable, "-c", _mods], cwd="/", capture_output=True, text=True).stderr
+        raise RuntimeError(f"Extensions not importable:\n{_err[-2000:]}")
+    ext_ready = True
+    return (ext_ready,)
+
+
+@app.cell
+def _(DATA, PACK, ext_ready, zipfile):
     # data (same pack as Step 2)
+    _ = ext_ready
     if not (DATA / "splits.json").exists():
         if not PACK.exists():
             raise FileNotFoundError(f"Upload step1_pack.zip to {PACK}")
