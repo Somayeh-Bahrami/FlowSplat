@@ -33,6 +33,9 @@
 #   = first case of the first 5 TRAINING patients; result files get the
 #   suffix _train5 and the summary holds radius_scale_calib
 #   (md.radius_scale), applied unchanged in Step 2.2 (FLOWSPLAT_R_SCALE).
+# Step 3.1 sweeps: FLOWSPLAT_DATA_DIR / FLOWSPLAT_RENDER_DIR point to a sweep
+#   folder (flowsplat.sweeps.make_setting_data); FLOWSPLAT_RUN_TAG is appended
+#   to the work folders and result files (e.g. _noise_high, _rep1).
 # FLOWSPLAT_N_CASES (default 5): number of patients (first case each); Gate 1
 #   (Oct 6): 15 training patients, k from the median (radius_scale_calib_median).
 
@@ -74,8 +77,9 @@ def _(Path, mo, os, sys):
     R2G_DIR = WORK / "external" / "r2_gaussian"
     DRGS_DIR = WORK / "external" / "4DRGS"
     PACK = Path(os.environ.get("FLOWSPLAT_PACK", str(WORK / "data" / "step1_pack.zip")))
-    DATA = WORK / "data" / "pack_v1"
-    RENDER = WORK / "data" / "render_v1"
+    DATA = Path(os.environ.get("FLOWSPLAT_DATA_DIR", str(WORK / "data" / "pack_v1")))
+    RENDER = Path(os.environ.get("FLOWSPLAT_RENDER_DIR", str(WORK / "data" / "render_v1")))
+    RUN_TAG = os.environ.get("FLOWSPLAT_RUN_TAG", "")
     OUT = WORK / "step2_1"
     N_VIEWS = int(os.environ.get("FLOWSPLAT_VIEWS", "60"))
     # Plan Step 2.1: static R2-Gaussian ("r2g"). Its DoD failed on Oct 4
@@ -91,7 +95,7 @@ def _(Path, mo, os, sys):
     RTAG = f"_train{N_CASES}" if SPLIT == "train" else ""
     print("views:", N_VIEWS, "| init:", INIT, "| split:", SPLIT, "| out:", OUT)
     return (COV_MIN, DATA, DOD_MM, DRGS_DIR, DRGS_ITERS, FLOWSPLAT_DIR, INIT, N_VIEWS, OUT, PACK, R2G_DIR,
-            N_CASES, RENDER, RTAG, SPLIT, md, rt)
+            N_CASES, RENDER, RTAG, RUN_TAG, SPLIT, md, rt)
 
 
 @app.cell
@@ -150,7 +154,7 @@ def _(DATA, N_CASES, PACK, RENDER, SPLIT, ext_ready, json, np, os, rt, zipfile):
 
 
 @app.cell
-def _(CASES, DATA, DRGS_DIR, DRGS_ITERS, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, json, md, np, subprocess, sys, time):
+def _(CASES, DATA, DRGS_DIR, DRGS_ITERS, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, RUN_TAG, json, md, np, subprocess, sys, time):
     # c) init volume per case, saved in the lumen frame:
     #    INIT=r2g: static R2-Gaussian (official scripts, defaults), plan Step 2.1
     #    INIT=fdk: TIGRE FDK (Hann) of the same views, plan Step 2.1 FALLBACK
@@ -159,7 +163,7 @@ def _(CASES, DATA, DRGS_DIR, DRGS_ITERS, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, js
 
     runs = {}
     for _c in CASES:
-        _base = OUT / f"{_c}_v{N_VIEWS}_{INIT}"
+        _base = OUT / f"{_c}_v{N_VIEWS}_{INIT}{RUN_TAG}"
         _base.mkdir(parents=True, exist_ok=True)
         _meta = json.loads(str(np.load(RENDER / f"{_c}.npz")["meta"]))
         _lum = _meta["lumen"]
@@ -225,7 +229,7 @@ def _(CASES, DATA, DRGS_DIR, DRGS_ITERS, INIT, N_VIEWS, OUT, R2G_DIR, RENDER, js
 
 
 @app.cell
-def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, RTAG, SPLIT, json, md, np, runs, time):
+def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, RTAG, RUN_TAG, SPLIT, json, md, np, runs, time):
     # d) geometry from the static volume, radius error, tube Gaussians
     import matplotlib as _mpl
 
@@ -273,7 +277,7 @@ def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, RTAG, SP
         _ax[1].set_ylabel("R (mm)")
         _ax[1].legend()
         _fig.tight_layout()
-        _fig.savefig(_res / f"step2.1_{_c}_v{N_VIEWS}_{INIT}{RTAG}.png", dpi=80)
+        _fig.savefig(_res / f"step2.1_{_c}_v{N_VIEWS}_{INIT}{RTAG}{RUN_TAG}.png", dpi=80)
         _plt.close(_fig)
         print(json.dumps({k: v for k, v in row.items() if k != "r2g_eval"}), flush=True)
     summary = {
@@ -297,7 +301,7 @@ def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, RTAG, SP
         "throat_err_mm_per_case": {r["case"]: round(r["throat_err_mm"], 3) for r in rows},
         "rows": rows,
     }
-    (_res / f"step2.1_geom_init_v{N_VIEWS}_{INIT}{RTAG}.json").write_text(json.dumps(summary, indent=2, default=str))
+    (_res / f"step2.1_geom_init_v{N_VIEWS}_{INIT}{RTAG}{RUN_TAG}.json").write_text(json.dumps(summary, indent=2, default=str))
     print(json.dumps({k: v for k, v in summary.items() if k != "rows"}, indent=2))
     return
 

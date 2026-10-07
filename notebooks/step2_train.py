@@ -25,6 +25,9 @@
 # FLOWSPLAT_R_SCALE = radius factor applied to the init radius (default 1;
 #   Oct 6: radius_scale_calib from Step 2.1 v2 on 5 training cases, file
 #   suffix _cal)
+# Step 3.1: FLOWSPLAT_DATA_DIR / FLOWSPLAT_RENDER_DIR (sweep folders),
+#   FLOWSPLAT_RUN_TAG (appended to init / work folders and result files);
+#   FFR per case and FFR summaries (flowsplat.metrics) in the results.
 
 import marimo
 
@@ -63,8 +66,9 @@ def _(Path, mo, os, sys):
     from flowsplat import train as tr
 
     PACK = Path(os.environ.get("FLOWSPLAT_PACK", str(WORK / "data" / "step1_pack.zip")))
-    DATA = WORK / "data" / "pack_v1"
-    RENDER = WORK / "data" / "render_v1"
+    DATA = Path(os.environ.get("FLOWSPLAT_DATA_DIR", str(WORK / "data" / "pack_v1")))
+    RENDER = Path(os.environ.get("FLOWSPLAT_RENDER_DIR", str(WORK / "data" / "render_v1")))
+    RUN_TAG = os.environ.get("FLOWSPLAT_RUN_TAG", "")
     OUT = WORK / "step2_2"
     MODE = os.environ.get("FLOWSPLAT_MODE", "overfit")
     # Fallback variants of the plan (train.VARIANTS); overfit runs all four.
@@ -72,12 +76,12 @@ def _(Path, mo, os, sys):
     N_VIEWS = int(os.environ.get("FLOWSPLAT_VIEWS", "60"))
     INIT = os.environ.get("FLOWSPLAT_INIT", "fdk")
     R_SCALE = float(os.environ.get("FLOWSPLAT_R_SCALE", "1"))
-    TAG = ("" if INIT == "fdk" else f"_{INIT}") + ("_cal" if R_SCALE != 1.0 else "")  # FDK file names unchanged
+    TAG = ("" if INIT == "fdk" else f"_{INIT}") + ("_cal" if R_SCALE != 1.0 else "") + RUN_TAG  # FDK names unchanged
     INIT_DIR = WORK / "step2_1"
     DOD_Q, DOD_DIAM_MM = 0.10, 0.2  # plan, Step 2.2 DoD
     print("mode:", MODE, "| views:", N_VIEWS, "| variants:", VARIANTS, "| init:", INIT, "| r_scale:", R_SCALE)
-    return (DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, INIT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, R_SCALE,
-            TAG, VARIANTS, md, rt, tr)
+    return (DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, INIT_DIR, MODE, N_VIEWS, OUT, PACK, RENDER, RUN_TAG,
+            R_SCALE, TAG, VARIANTS, md, rt, tr)
 
 
 @app.cell
@@ -131,7 +135,9 @@ def _(DATA, MODE, PACK, RENDER, json, np, os, rt, tigre_ready, zipfile):
 
 
 @app.cell
-def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, R_SCALE, TAG, VARIANTS, json, md, np, rt, time, tr):
+def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, RUN_TAG, R_SCALE, TAG, VARIANTS, json, md, np, rt, time, tr):
+    from flowsplat import metrics as _mt
+
     # c) fit every case with every requested variant (same init per case)
     import torch
 
@@ -145,7 +151,7 @@ def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, R_SCALE, TAG, VARIANTS,
         # Step 2.1 init volume, then the same centerline and half-max radius:
         # fdk: FDK of the same training views; 4drgs: Step 2.1 v2 volume
         if INIT == "4drgs":
-            _vf = INIT_DIR / f"{_c}_v{N_VIEWS}_4drgs" / "vol_lumen.npy"
+            _vf = INIT_DIR / f"{_c}_v{N_VIEWS}_4drgs{RUN_TAG}" / "vol_lumen.npy"
             if not _vf.exists():
                 raise FileNotFoundError(f"{_vf}: run notebooks/step2_geom_init.py with FLOWSPLAT_INIT=4drgs first")
             _vol = np.load(_vf)
@@ -164,6 +170,17 @@ def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, R_SCALE, TAG, VARIANTS,
                                     variant=_v, log=lambda *a: print(_c, _v, *a, flush=True))
             _est = _m.estimates()
             _ev = tr.evaluate(_est, _case, _meta["lumen"], _meta["axis_perm"])
+            # Step 3.1: FFR from the estimated radius profile (model order: the
+            # direction test may reverse the chain) and the recovered rest Q
+            _s_m = _s if _info["direction"] > 0 else _s[::-1]
+            _xyz_m = md.world_to_lumen(_est["position_world_mm"], _meta["lumen"], _meta["axis_perm"])
+            try:
+                _f = _mt.ffr_case(_s_m, _est["radius_mm"], _est["q_mm3s"] * 1e-9, json.loads(str(_case["params"])),
+                                  _xyz_m, _case)
+                _ev.update({k: v for k, v in _f.items() if k != "lesion"})
+                _ev["ffr_lesion"] = _f["lesion"]
+            except ValueError as _e:
+                _ev["ffr_error"] = str(_e)
             _ev["q_rel_err_stage_a"] = abs(_info["q_after_stage_a"] / 1000 - _ev["q_gt_mls"]) / _ev["q_gt_mls"]
             _d = OUT / f"{_c}_v{N_VIEWS}{TAG}_{_v}"
             _d.mkdir(parents=True, exist_ok=True)
@@ -180,6 +197,8 @@ def _(CASES, DATA, INIT, INIT_DIR, N_VIEWS, OUT, RENDER, R_SCALE, TAG, VARIANTS,
 
 @app.cell
 def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, MODE, N_VIEWS, OUT, RENDER, R_SCALE, TAG, VARIANTS, json, md, np, results, time):
+    from flowsplat import metrics as _mt2
+
     # d) summary per variant and figures per case (all variants in one plot)
     import matplotlib as _mpl
 
@@ -206,6 +225,9 @@ def _(DATA, DOD_DIAM_MM, DOD_Q, FLOWSPLAT_DIR, INIT, MODE, N_VIEWS, OUT, RENDER,
                             "n_lesion_found": int(len(_dm))},
             "radius_mae_mm_mean": float(np.nanmean([r["radius_mae_mm"] for r in _rows])),
             "dod_met": bool(_q.mean() < DOD_Q and len(_dm) == len(_rows) and _dm.mean() < DOD_DIAM_MM),
+            "ffr": {_k: _mt2.ffr_summary([r for r in _rows if _k in r], _k)
+                    for _k in ("ffr_est", "ffr_est_pop_cfr", "ffr_true_lesion_est_q", "ffr_est_lesion_true_q")
+                    if any(_k in r for r in _rows)},
         }
     summary = {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

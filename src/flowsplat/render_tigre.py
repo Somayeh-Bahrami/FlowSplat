@@ -151,7 +151,8 @@ def tigre_geo(gd):
     return geo
 
 
-def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True):
+def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True,
+                noise_poisson=NOISE_POISSON, noise_gauss=NOISE_GAUSS):
     """Project all frames of one case (Step 1.1 case file with the stenosed
     radius r_mm, Step 1.2 bolus file). Returns (proj float16 [T, nv, nu], meta).
 
@@ -180,11 +181,11 @@ def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True
         projs[j] = tigre.Ax(vol, geo, angles[j : j + 1])[0]
     if noise:
         np.random.seed(int(rng.integers(2**31)))  # CTnoise uses numpy's global RNG
-        projs = CTnoise.add(projs, Poisson=NOISE_POISSON, Gaussian=np.array(NOISE_GAUSS))
+        projs = CTnoise.add(projs, Poisson=noise_poisson, Gaussian=np.array(noise_gauss))
         projs[projs < 0] = 0.0
     meta = {"geometry": gd, "axis_perm": perm, "axcodes": axcodes, "mu_per_mm": mu,
             "lumen": {k: lum[k] for k in ("shape", "origin_mm", "vox_mm")}, "n_lumen_voxels": int(len(idx)),
-            "noise": {"poisson": NOISE_POISSON, "gaussian": list(NOISE_GAUSS)} if noise else None,
+            "noise": {"poisson": noise_poisson, "gaussian": list(noise_gauss)} if noise else None,
             "view_subsets": view_subsets(len(angles))}
     return projs.astype(np.float16), meta
 
