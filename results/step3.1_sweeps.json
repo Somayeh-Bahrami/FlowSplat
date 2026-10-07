@@ -109,10 +109,49 @@
         "specificity": 0.6875,
         "n_positive": 4
       }
+    },
+    "views133": {
+      "spec": {
+        "kind": "views",
+        "views": 133,
+        "cases": "val20"
+      },
+      "n": 20,
+      "q": {
+        "mean": 0.03830881183703294,
+        "median": 0.03685333211624743,
+        "max": 0.09937028585875195,
+        "frac_below": 1.0,
+        "n": 20
+      },
+      "q_signed_mean": 0.01839167264892,
+      "diam_mm": {
+        "mean": 0.11152552951158876,
+        "median": 0.05434394322180658,
+        "frac_below_0p2": 0.95,
+        "n_found": 20
+      },
+      "ffr_est": {
+        "n": 20,
+        "mae": 0.03953310481805396,
+        "bias": -0.0054601377854678335,
+        "accuracy": 0.85,
+        "sensitivity": 0.75,
+        "specificity": 0.875,
+        "n_positive": 4
+      },
+      "ffr_est_pop_cfr": {
+        "n": 20,
+        "mae": 0.0993973864794033,
+        "bias": -0.07880078899150952,
+        "accuracy": 0.8,
+        "sensitivity": 1.0,
+        "specificity": 0.75,
+        "n_positive": 4
+      }
     }
   },
   "missing": [
-    "views133",
     "noise_low",
     "noise_high",
     "pe_d1e-5",

@@ -68,7 +68,7 @@ Settings and levels: flowsplat.sweeps.SETTINGS; table: results/step3.1_sweeps.js
 |---|---|---|---|---|---|---|---|---|
 | 30 | 1.126 | 7.8 % (6.9 %) | 12 / 20 | +5.8 % | 0.171 mm | 15 / 20 | 0.063 / 85 % | 0.113 / 75 % |
 | 60 (run 8) | 1.086 | 5.3 % (4.3 %) | 19 / 20 | +3.0 % | 0.104 mm | 16 / 20 | 0.030 / 90 % | 0.079 / 85 % |
-| 133 | | pending | | | | | | |
+| 133 | 1.070 | 3.8 % (3.7 %) | 20 / 20 | +1.8 % | 0.112 mm | 19 / 20 | 0.040 / 85 % | 0.099 / 80 % |
 
 30 views (Oct 7, molab, repo `fbead1b`, results/step2.2_val20_v30_4drgs_cal.json):
 - Step 2.2 DoD (means) also met at 30 views: Q 7.8 %, diameter 0.171 mm.
@@ -82,3 +82,18 @@ Settings and levels: flowsplat.sweeps.SETTINGS; table: results/step3.1_sweeps.js
   true lesion + estimated Q 0.019, estimated lesion + true Q 0.073. Largest
   FFR errors: 130_0 (0.577 -> 0.334), 130_1 (0.873 -> 0.636), 131_1
   (0.962 -> 0.782), 135_0 (0.605 -> 0.794).
+
+133 views (Oct 7, molab, repo `57197b8`, results/step2.2_val20_v133_4drgs_cal.json):
+- Q 3.8 %, all 20 below 10 %; diameter 0.112 mm, 19 / 20 below 0.2 mm.
+- More views, less radius bias: training area ratio median 0.87 (k 1.070);
+  validation area mean 0.893; all 20 validation cases pass the v2 rule.
+- FFR MAE 0.040 is above the 60-view 0.030 because of one case: 131_1
+  (throat 0.85 mm diameter error, FFR 0.962 -> 0.727). Without 131_1:
+  0.057 / 0.029 / 0.029 at 30 / 60 / 133 views. 131_1 fails at every view
+  count (patient 131 is the weak patient since Step 2.1).
+- The 4DRGS held-out PSNR is reported as 0 at 133 views: all frames are
+  training views, so 4DRGS test.py has no held-out view (not an error).
+
+**Views trend:** Q error 7.8 / 5.3 / 3.8 %, diameter 0.171 / 0.104 / 0.112 mm,
+FFR MAE 0.063 / 0.030 / 0.040 (0.057 / 0.029 / 0.029 without 131_1) at
+30 / 60 / 133 views. The Step 2.2 DoD holds at every view count.
