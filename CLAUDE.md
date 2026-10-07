@@ -122,3 +122,15 @@ registration + full draft. Nov 16 CVPR paper (no extension). Nov 23 supp.
 **Baselines.** (1) 4DRGS + post-hoc TDC velocity; (2) PUNCH-style 1D fit on
 2D kymograph; (3) R2-Gaussian geometry + fixed 0.35 m/s (fQFR analog);
 (4) Oracle GT geometry and Q through Young-Tsai.
+
+## Gate decisions (override the plan summary above where they differ)
+
+- **Gate 1 (held Oct 6): pass, continue CVPR.** Details: reports/gate1.md.
+  - Step 2.1 init: 4DRGS (official code, 10k iterations) time-averaged volume,
+    then centerline + half-max radius, radius x k (k from training cases only,
+    median rule, md.radius_scale).
+  - Step 2.2 variant for all later steps: frozen (geometry fixed, Stage A fits
+    Q and C_in).
+  - Step 3.1 adds 3 repeat 4DRGS runs on 5 val cases (run-to-run spread).
+- Push finished steps to origin/main without asking (ask before force-push or
+  history rewrite).

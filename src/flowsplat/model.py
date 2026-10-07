@@ -182,7 +182,7 @@ def radius_error(xyz_est, r_est, s_gt, xyz_gt, r_gt, trim_mm=5.0):
     }
 
 
-def radius_scale(area_ratios):
+def radius_scale(area_ratios, stat="mean"):
     """One multiplicative radius correction from calibration cases:
     k = 1 / sqrt(mean area ratio), so the mean lumen area (which sets Q,
     plan: tau = int A / Q ds) is unbiased on the calibration set. Fitted on
@@ -190,9 +190,13 @@ def radius_scale(area_ratios):
     Multiplicative rather than an offset because the bias grows with the
     radius (Step 2.1 v2: throat nearly exact, healthy segments 0.08 to
     0.15 mm low). Ref: OURS (plan deviation approved Oct 6, option 1).
+    stat="median" (Gate 1, Oct 6): robust to one outlier case (training case
+    110_0, area ratio 0.64, pulled the 5-case mean k to 1.114 while the
+    validation cases needed about 1.07).
     """
     a = np.asarray(area_ratios, float)
-    return float(1.0 / np.sqrt(a.mean()))
+    m = np.median(a) if stat == "median" else a.mean()
+    return float(1.0 / np.sqrt(m))
 
 
 def coverage_metrics(xyz_est, r_est, s_gt, xyz_gt, lesion_center_mm, lesion_len_mm, r_min_gt_mm, tol_mm=2.0):

@@ -214,3 +214,4 @@ def test_area_ratio_and_radius_scale():
     assert k == pytest.approx(1 / 0.9)
     assert md.radius_error(xyz, k * 0.9 * r, s, xyz, r)["area_ratio"] == pytest.approx(1.0)
     assert md.radius_scale([0.81, 1.0]) == pytest.approx(1 / np.sqrt(0.905))
+    assert md.radius_scale([0.64, 0.79, 0.84, 0.83, 0.93], stat="median") == pytest.approx(1 / np.sqrt(0.83))

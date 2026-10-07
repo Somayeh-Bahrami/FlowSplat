@@ -33,6 +33,8 @@
 #   = first case of the first 5 TRAINING patients; result files get the
 #   suffix _train5 and the summary holds radius_scale_calib
 #   (md.radius_scale), applied unchanged in Step 2.2 (FLOWSPLAT_R_SCALE).
+# FLOWSPLAT_N_CASES (default 5): number of patients (first case each); Gate 1
+#   (Oct 6): 15 training patients, k from the median (radius_scale_calib_median).
 
 import marimo
 
@@ -85,10 +87,11 @@ def _(Path, mo, os, sys):
     COV_MIN = 0.9  # v2 pass rule: vessel and lesion coverage (OURS, fixed Oct 5 before the run)
     DRGS_ITERS = int(os.environ.get("FLOWSPLAT_4DRGS_ITERS", "10000"))
     SPLIT = os.environ.get("FLOWSPLAT_SPLIT", "val")
-    RTAG = "_train5" if SPLIT == "train" else ""
+    N_CASES = int(os.environ.get("FLOWSPLAT_N_CASES", "5"))
+    RTAG = f"_train{N_CASES}" if SPLIT == "train" else ""
     print("views:", N_VIEWS, "| init:", INIT, "| split:", SPLIT, "| out:", OUT)
     return (COV_MIN, DATA, DOD_MM, DRGS_DIR, DRGS_ITERS, FLOWSPLAT_DIR, INIT, N_VIEWS, OUT, PACK, R2G_DIR,
-            RENDER, RTAG, SPLIT, md, rt)
+            N_CASES, RENDER, RTAG, SPLIT, md, rt)
 
 
 @app.cell
@@ -118,7 +121,7 @@ def _(DRGS_DIR, FLOWSPLAT_DIR, INIT, R2G_DIR, os, subprocess, sys):
 
 
 @app.cell
-def _(DATA, PACK, RENDER, SPLIT, ext_ready, json, np, os, rt, zipfile):
+def _(DATA, N_CASES, PACK, RENDER, SPLIT, ext_ready, json, np, os, rt, zipfile):
     # b) data
     _ = ext_ready
     if not (DATA / "splits.json").exists():
@@ -129,7 +132,7 @@ def _(DATA, PACK, RENDER, SPLIT, ext_ready, json, np, os, rt, zipfile):
             _z.extractall(DATA)
     _splits = json.loads((DATA / "splits.json").read_text())
     _env_cases = os.environ.get("FLOWSPLAT_CASES")
-    CASES = _env_cases.split(",") if _env_cases else [f"{g}_0" for g in _splits[SPLIT][:5]]
+    CASES = _env_cases.split(",") if _env_cases else [f"{g}_0" for g in _splits[SPLIT][:N_CASES]]
     RENDER.mkdir(parents=True, exist_ok=True)
     AXCODES = {}
     for _c in CASES:
@@ -281,6 +284,7 @@ def _(COV_MIN, CASES, DATA, DOD_MM, FLOWSPLAT_DIR, INIT, N_VIEWS, Path, RTAG, SP
         "dod_mm": DOD_MM,
         "area_ratio_per_case": {r["case"]: round(r["area_ratio"], 4) for r in rows},
         "radius_scale_calib": md.radius_scale([r["area_ratio"] for r in rows]),
+        "radius_scale_calib_median": md.radius_scale([r["area_ratio"] for r in rows], stat="median"),
         "mae_mm_per_case": {r["case"]: round(r["mae_mm"], 4) for r in rows},
         "mae_mm_mean": float(np.mean([r["mae_mm"] for r in rows])),
         "all_pass": all(r["pass"] for r in rows),
