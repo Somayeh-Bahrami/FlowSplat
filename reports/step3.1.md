@@ -97,3 +97,38 @@ Settings and levels: flowsplat.sweeps.SETTINGS; table: results/step3.1_sweeps.js
 **Views trend:** Q error 7.8 / 5.3 / 3.8 %, diameter 0.171 / 0.104 / 0.112 mm,
 FFR MAE 0.063 / 0.030 / 0.040 (0.057 / 0.029 / 0.029 without 131_1) at
 30 / 60 / 133 views. The Step 2.2 DoD holds at every view count.
+
+### Noise and Peclet (5 validation cases, 60 views, k = 1.086)
+
+Oct 7, molab, repo `2e02924`. Middle level = run 8 on the same 5 cases.
+
+| Setting | 4DRGS v2 pass | Area ratio (mean) | Q err mean | Q signed | Diam. err mean | FFR MAE / acc. (case CFR) |
+|---|---|---|---|---|---|---|
+| noise low (I0 1e6, sigma 1) | 5 / 5 | 0.905 | 6.1 % | +6.1 % | 0.111 mm | 0.083 / 100 % |
+| **default (run 8, I0 1e5, sigma 10)** | 5 / 5 | 0.877 (20 cases) | 4.4 % | +1.7 % | 0.083 mm | 0.060 / 80 % |
+| noise high (I0 1e4, sigma 30) | 1 / 5 | 0.669 | **20.9 %** | -18.3 % | 0.157 mm | 0.025 / 100 % |
+| D = 1e-5 m^2/s (Pe 10x lower) | 5 / 5 | 0.871 | 3.6 % | +1.8 % | 0.115 mm | 0.070 / 80 % |
+| D = 1e-4 m^2/s (Pe 100x lower) | 5 / 5 | 0.872 | 4.5 % | +4.1 % | 0.104 mm | 0.073 / 100 % |
+
+(Pe = u L / D; for 121_0 about 21000 at the default D, so about 2400 and 240
+at the two sweep levels; PUNCH's reported value of about 4000 lies between.)
+
+- **Peclet: robust.** Q error 3.6 % and 4.5 % even at 100x more dispersion,
+  so the plug-flow model holds well beyond PUNCH's regime. The fitted
+  model ignores dispersion; the half-rise arrival used by the fit is
+  little affected by symmetric front spreading.
+- **Noise low: unchanged** within case-to-case variation.
+- **Noise high: Q fails (20.9 %, 1 of 5 below 10 %).** Same mechanism as
+  in Step 2.2: the 4DRGS half-max radius gets much thinner on noisy data
+  (area ratio 0.67 instead of 0.88), and k calibrated at the default noise
+  level does not correct it, so Q is underestimated (-18 %; 130_0 -47 %).
+  The calibration is noise-level specific.
+- FFR at high noise looks good (0.025) only because two errors cancel: the
+  too-small throat lowers FFR, the too-small Q raises it (estimated lesion
+  with true Q: 0.239). Not a real robustness.
+- 4DRGS held-out PSNR follows the noise: 37 to 44 dB (low), 32 to 38 dB
+  (default), 26 to 32 dB (high).
+- Per-case FFR on 5 cases is dominated by the severe lesions 131_0 and
+  135_0 (throat errors of 0.1 mm); FFR MAE differences between these
+  settings are within that variation.
+

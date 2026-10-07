@@ -149,13 +149,177 @@
         "specificity": 0.75,
         "n_positive": 4
       }
+    },
+    "noise_low": {
+      "spec": {
+        "kind": "noise",
+        "poisson": 1000000.0,
+        "gauss": [
+          0.0,
+          1.0
+        ],
+        "cases": "val5"
+      },
+      "n": 5,
+      "q": {
+        "mean": 0.06125363380545705,
+        "median": 0.053849882199239696,
+        "max": 0.09450173327734895,
+        "frac_below": 1.0,
+        "n": 5
+      },
+      "q_signed_mean": 0.06125363380545705,
+      "diam_mm": {
+        "mean": 0.11101393508470551,
+        "median": 0.098761367549278,
+        "frac_below_0p2": 0.8,
+        "n_found": 5
+      },
+      "ffr_est": {
+        "n": 5,
+        "mae": 0.08310009294945565,
+        "bias": -0.006391692999717613,
+        "accuracy": 1.0,
+        "sensitivity": 1.0,
+        "specificity": 1.0,
+        "n_positive": 3
+      },
+      "ffr_est_pop_cfr": {
+        "n": 5,
+        "mae": 0.22774228460467402,
+        "bias": -0.1702376838122049,
+        "accuracy": 1.0,
+        "sensitivity": 1.0,
+        "specificity": 1.0,
+        "n_positive": 3
+      }
+    },
+    "noise_high": {
+      "spec": {
+        "kind": "noise",
+        "poisson": 10000.0,
+        "gauss": [
+          0.0,
+          30.0
+        ],
+        "cases": "val5"
+      },
+      "n": 5,
+      "q": {
+        "mean": 0.20938233635868073,
+        "median": 0.1835269206944554,
+        "max": 0.47160968645946233,
+        "frac_below": 0.2,
+        "n": 5
+      },
+      "q_signed_mean": -0.18312827004607843,
+      "diam_mm": {
+        "mean": 0.15684336339644694,
+        "median": 0.10948545957627132,
+        "frac_below_0p2": 0.8,
+        "n_found": 5
+      },
+      "ffr_est": {
+        "n": 5,
+        "mae": 0.02499912021283781,
+        "bias": 0.0008732559309154286,
+        "accuracy": 1.0,
+        "sensitivity": 1.0,
+        "specificity": 1.0,
+        "n_positive": 3
+      },
+      "ffr_est_pop_cfr": {
+        "n": 5,
+        "mae": 0.12418379756746811,
+        "bias": -0.12418379756746811,
+        "accuracy": 1.0,
+        "sensitivity": 1.0,
+        "specificity": 1.0,
+        "n_positive": 3
+      }
+    },
+    "pe_d1e-5": {
+      "spec": {
+        "kind": "peclet",
+        "d_m2s": 1e-05,
+        "cases": "val5"
+      },
+      "n": 5,
+      "q": {
+        "mean": 0.036381779694659534,
+        "median": 0.037780844217226016,
+        "max": 0.04899803901022661,
+        "frac_below": 1.0,
+        "n": 5
+      },
+      "q_signed_mean": 0.01771183128755389,
+      "diam_mm": {
+        "mean": 0.11503942929756321,
+        "median": 0.05877916788039372,
+        "frac_below_0p2": 0.8,
+        "n_found": 5
+      },
+      "ffr_est": {
+        "n": 5,
+        "mae": 0.06973369877577473,
+        "bias": 0.06806008279704859,
+        "accuracy": 0.8,
+        "sensitivity": 0.6666666666666666,
+        "specificity": 1.0,
+        "n_positive": 3
+      },
+      "ffr_est_pop_cfr": {
+        "n": 5,
+        "mae": 0.08235415374903421,
+        "bias": -0.028163241856222498,
+        "accuracy": 1.0,
+        "sensitivity": 1.0,
+        "specificity": 1.0,
+        "n_positive": 3
+      }
+    },
+    "pe_d1e-4": {
+      "spec": {
+        "kind": "peclet",
+        "d_m2s": 0.0001,
+        "cases": "val5"
+      },
+      "n": 5,
+      "q": {
+        "mean": 0.04488017659031121,
+        "median": 0.04999211456009148,
+        "max": 0.09998644479498323,
+        "frac_below": 1.0,
+        "n": 5
+      },
+      "q_signed_mean": 0.04063129163195496,
+      "diam_mm": {
+        "mean": 0.10368526893283021,
+        "median": 0.09239751086566383,
+        "frac_below_0p2": 1.0,
+        "n_found": 5
+      },
+      "ffr_est": {
+        "n": 5,
+        "mae": 0.07344658175321607,
+        "bias": 0.02145559420845401,
+        "accuracy": 1.0,
+        "sensitivity": 1.0,
+        "specificity": 1.0,
+        "n_positive": 3
+      },
+      "ffr_est_pop_cfr": {
+        "n": 5,
+        "mae": 0.13794954778173923,
+        "bias": -0.09960384130095419,
+        "accuracy": 1.0,
+        "sensitivity": 1.0,
+        "specificity": 1.0,
+        "n_positive": 3
+      }
     }
   },
   "missing": [
-    "noise_low",
-    "noise_high",
-    "pe_d1e-5",
-    "pe_d1e-4",
     "flow_v0.10",
     "flow_v0.25",
     "flow_v0.40",
