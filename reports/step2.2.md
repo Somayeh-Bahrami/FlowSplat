@@ -304,6 +304,37 @@ Area ratio (before k) 0.80 to 0.93, mean 0.875, SD 0.040.
   run 6, 0.18 mm here). Seeds of 4DRGS are not controlled by us (CUDA
   nondeterminism, UNVERIFIED cause).
 
+### Run 8 (final, Gate 1 method): 20 validation cases, Oct 6, repo `8c082c8`
+
+Gate 1 decisions (reports/gate1.md): 4DRGS init, k from the first case of
+15 training patients with the median rule, variant frozen.
+
+**Calibration (15 training cases).** Area ratios 0.608 to 0.924; two
+outliers, 110_0 (0.618) and 129_0 (0.608), both fail the Step 2.1 v2
+radius rule (MAE 0.33 and 0.44 mm); lesion coverage 100 % on all 15.
+k (median) = 1.0860 (k from the mean would be 1.0968). Four cases used
+M1 below 30000 (53151 to 57951 FDK voxels above threshold).
+
+**4DRGS run-to-run variation.** All 20 validation volumes were rebuilt in
+this session. Against run 7: area ratio difference mean +0.002, SD 0.009,
+max 0.028; throat error difference SD 0.035 mm, max 0.12 mm. All 20 again
+pass the v2 rule with 100 % lesion coverage. Validation area ratio mean
+0.877 (k = 1.068 would be unbiased; the training median gives 1.086).
+
+**Step 2.2, frozen, radius x 1.0860:**
+
+| Metric | Mean | Median | Cases within DoD |
+|---|---|---|---|
+| Q relative error | **5.3 %** | 4.3 % | 19 / 20 below 10 % (max 11.8 %, 667_1) |
+| Q est / GT - 1 | +3.0 % +- 5.3 % | | |
+| Stenosis diameter error | **0.104 mm** | 0.060 mm | 16 / 20 below 0.2 mm |
+| Radius MAE | 0.071 mm | | |
+
+Diameter failures: 131_1 0.475 mm, 131_2 0.231 mm, 667_0 0.223 mm,
+131_0 0.201 mm (patient 131 is the weak patient in every run).
+Per-case data: results/step2.2_val20_v60_4drgs_cal_k15.json, figures in
+results/step2.2_val20_4drgs_cal_k15_figs/.
+
 ## DoD
 
 | DoD part | Result (pose_arr, 20 val cases, 60 views) | Met |
@@ -315,7 +346,13 @@ DoD rule as interpreted: mean over the 20 cases (interpretation ours, to
 confirm). With the median, the diameter would pass (0.12 mm) and Q would
 pass; per case, 10 of 19 pass the diameter.
 
-Update Oct 6 (runs 5 to 7, approved plan deviation: 4DRGS init and radius
+**Final (run 8, Gate 1 method): DoD met: yes.** Q 5.3 % (< 10 %) and
+stenosis diameter 0.104 mm (< 0.2 mm), means over the 20 validation cases,
+60 views. Fallback used: yes (frozen geometry, plan Step 2.2 fallback "keep
+geometry frozen longer"), plus the Gate 1 changes (4DRGS init, radius
+calibration on training cases). 30 views not run yet (Step 3.1 sweeps).
+
+History: Update Oct 6 (runs 5 to 7, approved plan deviation: 4DRGS init and radius
 calibration): with the pre-specified primary variant pose_arr the DoD is
 still not met (Q 10.5 %, diameter 0.146 mm); with frozen both parts are met
 on 20 cases (Q 8.3 %, diameter 0.146 mm). Which variant counts is a Gate 1

@@ -1,26 +1,36 @@
-% Step 2.1: geometry initialisation and tube-aligned Gaussians.
-% Numbers from results/step2.1_geom_init_v60_fdk_run4.json (and run 1 for the static R2-Gaussian route).
+% Step 2.1 (final, Gate 1 on Oct 6): geometry initialisation and tube-aligned Gaussians.
+% Numbers from results/step2.1_geom_init_v60_4drgs_val20.json (20 validation cases),
+% results/step2.1_geom_init_v60_4drgs_train15.json (calibration) and
+% results/step2.1_geom_init_v60_fdk_run4.json, _r2g_run1.json (alternatives).
 % Bib keys: liu2025fourdrgs, zha2024r2gaussian, biguri2016tigre.
 
 \paragraph{Geometry initialization.}
-Because each view of a rotational DSA sweep is acquired at a different
-time, a static reconstruction sees an inconsistent object. We therefore
-initialize geometry from a ground-truth-free FDK volume of the training
-views (Hann filter, TIGRE~\cite{biguri2016tigre}). The centerline is the
+Each view of a rotational DSA sweep is acquired at a different time, so a
+static reconstruction sees an inconsistent object. We therefore take the
+vessel geometry from 4DRGS~\cite{liu2025fourdrgs}, which models static
+Gaussian geometry with a time-dependent attenuation, and voxelize its
+time-averaged model on the reconstruction grid. The centerline is the
 longest geodesic path of the skeleton of the thresholded volume, and the
-lumen radius $R(s)$ at each arc length $s$ is the distance at which the
+lumen radius $\hat R(s)$ at arc length $s$ is the distance at which the
 cross-sectional profile falls to half of its central value, taken as the
 median over 16 directions. This half-maximum criterion is independent of
-the intensity scale, which matters because each vessel segment is
-opacified for a different fraction of the sweep. We place one Gaussian
-every 0.5\,mm along the centerline, map it to its arc length $s_i$, align
-its major axis with the local tangent, and set its cross-sectional scale
-to $\sigma_i = R(s_i)/\sqrt{2}$ so that the lumen area is
-$A(s_i) = 2\pi\sigma_i^2$. Scales use the bounded activation of
-4DRGS~\cite{liu2025fourdrgs}, and a tube-alignment term
-$\frac{1}{N}\sum_i \bigl(1 - (\mathbf{a}_i^\top \mathbf{t}_i)^2\bigr)$
-keeps each major axis $\mathbf{a}_i$ along the tangent $\mathbf{t}_i$
-during optimization. On five validation cases with 60 views, the
-initial radius error is 0.05 to 0.12\,mm (mean 0.08\,mm), whereas a static
-R$^2$-Gaussian~\cite{zha2024r2gaussian} fitted to the same dynamic views
-drifts away from the vessel (0.20 to 0.42\,mm).
+the intensity scale, which matters because each segment is opacified for
+a different fraction of the sweep. The half-maximum radius of the 4DRGS
+volume is biased low, so we use $R(s) = k\,\hat R(s)$ with a single factor
+$k = 1/\sqrt{\operatorname{median}_c\, \bar A_c/A_c}$, where
+$\bar A_c/A_c$ is the ratio of estimated to true mean lumen area on
+training case $c$ ($k = 1.086$ from 15 training cases; the validation and
+test cases are not used). We place one Gaussian every 0.5\,mm along the
+centerline, map it to its arc length $s_i$, align its major axis with the
+local tangent, and set its cross-sectional scale to
+$\sigma_i = R(s_i)/\sqrt{2}$, so that $A(s_i) = 2\pi\sigma_i^2$. Scales use
+the bounded activation of 4DRGS~\cite{liu2025fourdrgs}.
+
+On 20 validation cases with 60 views, the centerline covers the whole
+vessel including the lesion in every case (lesion coverage 100\,\%,
+vessel coverage at least 97\,\%). Two simpler initializations fail in
+complementary ways: an FDK volume of the same views (Hann filter,
+TIGRE~\cite{biguri2016tigre}) loses dim, early-filled segments (one case
+misses its stenosis entirely) and mis-sizes the throat, and a static
+R$^2$-Gaussian~\cite{zha2024r2gaussian} fitted to the dynamic views drifts
+away from the vessel (radius error 0.20 to 0.42\,mm).

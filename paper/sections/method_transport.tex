@@ -1,5 +1,6 @@
-% Step 2.2: transport layer and optimization.
-% Numbers from results/step2.2_val20_v60.json (20 validation cases, 60 views).
+% Step 2.2 (final, Gate 1 on Oct 6): transport layer and optimization.
+% Numbers from results/step2.2_val20_v60_4drgs_cal_k15.json (20 validation cases, 60 views, k = 1.086)
+% and results/step2.2_val20_v60.json (FDK initialization, for comparison).
 % Bib keys: zha2024r2gaussian, liu2025fourdrgs, thakur2026punch.
 
 \paragraph{Transport-constrained Gaussians.}
@@ -19,20 +20,22 @@ rendering model of R$^2$-Gaussian~\cite{zha2024r2gaussian}, evaluated at the
 acquisition time of that view.
 
 \paragraph{Optimization.}
-Starting from the FDK initialization, we first determine the inlet end of
-the vessel by a short fit in both directions, then fit $Q$ and the inlet
-curve with the geometry frozen, and finally refine the Gaussian positions
-and orientations jointly with the flow, using the L1 and D-SSIM loss of
-4DRGS~\cite{liu2025fourdrgs} plus an arrival-time term that compares the
-modelled arrival $t_0 + \tau_i$ with the half-peak time measured at each
-Gaussian's footprint. Radii are kept at their initialization: when they
-are free, a Gaussian cross-section fitted to the flat-topped lumen profile
-becomes systematically narrower, which biases both the area and the flow.
+We first determine the inlet end of the vessel by a short fit in both
+directions, then fit $Q$ and the inlet curve to all training views with
+the geometry fixed, using the L1 and D-SSIM loss of
+4DRGS~\cite{liu2025fourdrgs}. Since $\tau$ is fixed by the observed
+arrival times, the recovered flow scales with the lumen area,
+$Q \propto \int A\,\mathrm{d}s$; the flow is therefore only as accurate
+as the area. Refining the geometry jointly with the flow did not help:
+with free radii, a Gaussian cross-section fitted to the flat-topped lumen
+profile becomes systematically narrower and biases the area and the flow,
+and refining positions alone (with an arrival-time term) added 1 to
+3\,\% to the flow error.
 
 \paragraph{Single-vessel validation.}
 On 20 validation cases with 60 views, the volumetric flow is recovered
-with a mean relative error of 5.2\,\% (median 3.6\,\%), with 17 of 20
-cases below 10\,\%. Freezing the whole geometry gives 4.1\,\%. The
-stenosis diameter, inherited from the initialization, has a median error
-of 0.12\,mm but a mean of 0.36\,mm, driven by cases whose initial throat
-is poorly resolved.
+with a mean relative error of 5.3\,\% (median 4.3\,\%, 19 of 20 cases
+below 10\,\%, signed bias $+3.0 \pm 5.3$\,\%), and the stenosis diameter
+with a mean error of 0.10\,mm (median 0.06\,mm, 16 of 20 cases below
+0.2\,mm). With the FDK initialization, the flow error is similar
+(5.2\,\%) but the stenosis diameter error is 0.36\,mm.

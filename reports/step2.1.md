@@ -227,3 +227,14 @@ the lumen area is 9 to 19 % too small (FDK: about 5 %).
 
 **Step 2.1 v2: pass on all 5 cases under the stricter rule (and the plan
 DoD).** The area bias matters for Q, see reports/step2.2.md run 5.
+
+### Final state after Gate 1 (Oct 6)
+
+The Step 2.1 method used from now on is the 4DRGS init (v2) with the
+radius multiplied by k = 1.086 (median rule, 15 training cases; see
+reports/gate1.md and reports/step2.2.md run 8). On the 20 validation cases
+the uncalibrated v2 geometry passes the stricter rule on every case (lesion
+coverage 100 %, vessel coverage >= 97 %, radius MAE 0.056 to 0.197 mm,
+results/step2.1_geom_init_v60_4drgs_val20.json); after calibration the
+radius MAE in Step 2.2 is 0.071 mm. 2 of 15 training cases (110_0, 129_0)
+fail the v2 rule (radius MAE 0.33 and 0.44 mm, lesion found).

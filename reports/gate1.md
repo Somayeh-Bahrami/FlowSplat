@@ -39,3 +39,9 @@ workshops or MICCAI 2027, same plan.
 
 - Does the calibration transfer to real data (no ground truth there)?
 - 30-view results not run yet (Step 3.1 sweeps).
+
+## Outcome of decision 3 (run 8, Oct 6)
+
+k = 1.0860 (median of 15 training cases). Step 2.2 on the 20 validation
+cases with frozen: Q 5.3 % (19 / 20 below 10 %), stenosis diameter
+0.104 mm (16 / 20 below 0.2 mm). Step 2.2 DoD met. Step 2.2 closed.
