@@ -1,7 +1,9 @@
 # Step 4.1: Baselines and main table
 
-Dates: Oct 27 to Nov 1, 2026 (plan; started Oct 7). Status: **in progress**
-(code done, molab runs pending).
+Dates: Oct 27 to Nov 1, 2026 (plan; done Oct 7 to 8). Status: **closed, DoD
+met** (one table, all methods, 30 held-out test cases). Fallback: not
+triggered (FlowSplat beats baseline 1 on average), but the margin is small
+and not significant; see "For Gate 2".
 
 Plan DoD: "One results table (Q error, FFR MAE, FFR accuracy, diameter
 error) on the held-out test set for all methods."
@@ -92,4 +94,55 @@ results/step4.1_test_table.json (all methods, B3 on 10 cases so far).
 - B3 on 20 of 30 cases: hyperemic Q error 41.6 % (mean), diameter error
   0.57 mm (13 of 20 lesions in the window, 1 / 13 below 0.2 mm), FFR raw MAE
   10.1 (clipped 0.71), accuracy 15 % (all 20 called significant).
+
+### B3 chunk 3: 639_* and 641_* (Oct 8, repo `637d489`)
+
+R2-Gaussian radius MAE 0.13 to 0.50 mm. B3 complete on all 30 test cases.
+
+## Main table (held-out test split, 30 cases, 60 views)
+
+results/step4.1_test_table.json (built on the M4 from the per-case
+artifacts in data/step4.1_merged; run 1 table identical for FlowSplat, B1,
+B2).
+
+| Method | Q error mean (median) | Q < 10 % | Diam. err mean (lesion found) | FFR MAE | FFR acc. at 0.80 | Sens. / spec. | FFR MAE, pop. CFR |
+|---|---|---|---|---|---|---|---|
+| **FlowSplat** | **5.5 % (5.5 %)** | **27 / 30** | **0.091 mm (30 / 30)** | **0.031** | **96.7 %** | 4/4, 25/26 | 0.084 |
+| B1: 4DRGS + TDC | 6.4 % (6.7 %) | 24 / 30 | 0.091 mm (same geometry) | 0.033 | 96.7 % | 4/4, 25/26 | 0.094 |
+| B2: PUNCH-style 2D | 24.3 % (23.2 %) | 1 / 30 | 0.091 mm (same geometry) | 0.039 | 90.0 % | 1/4, 26/26 | 0.046 |
+| B3: R2-Gaussian + 0.35 m/s | 43.1 % (45.9 %) (hyperemic) | 3 / 30 | 0.519 mm (22 / 30) | 6.94 raw, 0.591 clipped | 26.7 % | 4/4, 4/26 | n.a. |
+| B4: oracle | 0 | 30 / 30 | 0 | 0 (0.009 via lesion finder) | 100 % | 4/4, 26/26 | n.a. |
+
+4 of 30 test cases have FFR <= 0.80.
+
+## DoD
+
+| DoD part | Result | Met |
+|---|---|---|
+| One results table (Q error, FFR MAE, FFR accuracy, diameter error) on the held-out test set for all methods | Table above, 5 methods x 30 cases | **Yes** |
+
+**DoD met: yes. Fallback used: no.** Plan fallback "If FlowSplat does not
+beat baseline 1 on average: show the advantage in hard regimes (few views,
+fast flow, strong foreshortening)" is not triggered: FlowSplat has the
+lower mean Q error (5.5 vs 6.4 %) and FFR MAE (0.031 vs 0.033).
+
+## For Gate 2 (Nov 2): "Beat baselines on average?"
+
+- vs B1 (4DRGS + TDC): yes on average, small margin, better on 17 / 30
+  cases, paired Wilcoxon p = 0.52 (not significant). Both use the same
+  4DRGS geometry and radius calibration; the difference is the flow
+  estimate only.
+- vs B2 (2D): clearly (Q 5.5 vs 24.3 %; FFR sensitivity 4/4 vs 1/4); the 2D
+  error grows with the out-of-plane angle (foreshortening).
+- vs B3 (static geometry + fixed velocity): clearly (geometry 0.09 vs
+  0.52 mm, FFR accuracy 96.7 vs 26.7 %).
+- The hard-regime comparison against B1 (30 views, fast flow, noise) has
+  not been run; it is the plan's fallback content and a Gate 2 decision.
+
+## Known limitations
+
+- B1 is close to FlowSplat on clean synthetic data at 60 views.
+- Clipped FFR metric for B3 added after seeing its values (labelled).
+- 6 of 30 lesions misplaced by the GT-free lesion finder (mild lesions).
+- B2 is given the true centerline and our 3D area (favourable to B2).
 

@@ -1,0 +1,58 @@
+% Step 4.1: main comparison on the held-out test split.
+% Numbers from results/step4.1_test_table.json (30 test cases, 60 views); Wilcoxon from reports/step4.1.md.
+% Bib keys: liu2025fourdrgs, thakur2026punch, zha2024r2gaussian, young1973flow.
+
+\paragraph{Baselines.}
+We compare against four baselines. \emph{4DRGS + TDC} uses the same
+4DRGS~\cite{liu2025fourdrgs} reconstruction and calibrated geometry as
+FlowSplat, but estimates the flow post hoc from the time-density curves of
+its 4D model: the half-rise arrival time at each centerline point is
+regressed on arc length and the mean velocity is multiplied by the mean
+lumen area. \emph{2D kymograph} follows PUNCH~\cite{thakur2026punch} on a
+conventional fixed-view angiogram of the same bolus: the kymograph is
+sampled along the projected centerline (here the true one), arc length is
+calibrated at the isocenter, and a one-dimensional advection model is fitted
+to it; area and lesion come from our 3D geometry, so only the projected
+velocity differs. \emph{Static geometry + fixed velocity} mimics fixed-flow
+QFR: a static R$^2$-Gaussian~\cite{zha2024r2gaussian} reconstruction of the
+dynamic views provides the geometry and the hyperemic velocity is fixed to
+0.35\,m/s. The \emph{oracle} uses the true geometry and flow. All methods
+share the same lesion extraction and Young--Tsai model~\cite{young1973flow}.
+
+\paragraph{Results.}
+Table~\ref{tab:main} reports the held-out test split (30 cases, 60 views).
+FlowSplat recovers the volumetric flow with a mean error of 5.5\,\% and the
+stenosis diameter with 0.09\,mm, and classifies 29 of 30 cases correctly at
+FFR 0.80. The 2D kymograph underestimates the velocity by foreshortening
+(24.3\,\%; the error grows with the out-of-plane angle of the vessel) and
+misses three of the four significant lesions. Static geometry fails on
+dynamic data: without a time model, the reconstruction of a partially
+filled vessel is too thin and misplaced (diameter error 0.52\,mm, 8 of 30
+lesions not recovered), and the resulting FFR is unusable. The closest
+competitor is 4DRGS with post-hoc time-density curves, which shares our
+geometry: FlowSplat is better on average (5.5 versus 6.4\,\% flow error,
+0.031 versus 0.033 FFR error), but the per-case difference is not
+significant on this clean data (Wilcoxon $p = 0.52$).
+
+\begin{table}[t]
+\centering
+\small
+\caption{Held-out test split (30 cases, 60 views). Flow: mean relative
+error of $Q$ (hyperemic flow for the fixed-velocity baseline); diameter:
+mean stenosis diameter error; FFR: mean absolute error and accuracy at
+0.80 with the case CFR. $^\dagger$FFR clipped to $[0,1]$; unclipped MAE
+6.94.}
+\label{tab:main}
+\begin{tabular}{lcccc}
+\toprule
+Method & Flow err. & Diam. err. (mm) & FFR MAE & FFR acc. \\
+\midrule
+Static geometry + 0.35\,m/s & 43.1\,\% & 0.52 & 0.591$^\dagger$ & 26.7\,\% \\
+2D kymograph (PUNCH-style) & 24.3\,\% & 0.09 & 0.039 & 90.0\,\% \\
+4DRGS + TDC & 6.4\,\% & 0.09 & 0.033 & 96.7\,\% \\
+\textbf{FlowSplat} & \textbf{5.5\,\%} & \textbf{0.09} & \textbf{0.031} & \textbf{96.7\,\%} \\
+\midrule
+Oracle (true geometry and flow) & 0 & 0 & 0 & 100\,\% \\
+\bottomrule
+\end{tabular}
+\end{table}
