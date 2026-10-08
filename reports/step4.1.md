@@ -67,3 +67,21 @@ results/step4.1_test_table_run1.json; per-case artifacts in data/step4.1_run1
 - GT-free lesion finder: 6 of 30 test cases misplaced (throat found 16 to
   78 mm away), all mild lesions (FFR 0.94 to 0.99), so their FFR stays
   close (largest: 133_1, 0.992 -> 0.927).
+
+### B3 chunk 1: R2-Gaussian + 0.35 m/s, 10 of 30 test cases (Oct 8, repo `7a40c8d`)
+
+Cases 116_0 to 132_4 (fresh session). Merged table on the M4:
+results/step4.1_test_table.json (all methods, B3 on 10 cases so far).
+
+- Static R2-Gaussian geometry on the dynamic views is poor, as in Step 2.1
+  run 1: radius MAE 0.24 to 0.55 mm, stenosis diameter error 0.65 mm
+  (mean, 8 of 10 lesions in the window; 1 / 8 below 0.2 mm).
+- Hyperemic flow from 0.35 m/s x A_n: error 35 % (mean).
+- FFR: the GT-free lesion finder picks false narrow throats on this
+  geometry, where Young-Tsai diverges (FFR down to -33); raw MAE 7.5 is not
+  meaningful. With FFR clipped to [0, 1] (added Oct 8 after seeing these
+  values, reported next to the raw metric): MAE 0.61; accuracy at 0.80:
+  0 / 10 (every case called significant; none is).
+- Chunks 2 (133_*, 612_*) and 3 (639_*, 641_*) pending; notebook now takes
+  FLOWSPLAT_B3_CASES so a fresh session does not repeat chunk 1.
+

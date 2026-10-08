@@ -122,6 +122,11 @@ def summarize(rows):
             fr = [x for x in rr if x.get(k) is not None]
             if fr:
                 e[k] = mt.ffr_summary(fr, k)
+                # Added Oct 8 after seeing baseline 3 (Young-Tsai gives FFR < 0
+                # for very narrow false throats): the same metric with FFR
+                # clipped to [0, 1], reported next to the raw one. Ref: OURS.
+                if any(not 0.0 <= x[k] <= 1.0 for x in fr):
+                    e[k + "_clipped"] = mt.ffr_summary([dict(x, **{k: min(max(x[k], 0.0), 1.0)}) for x in fr], k)
         td = [x["throat_dist_mm"] for x in rr if x.get("throat_dist_mm") is not None]
         if td:
             e["ffr_lesion_misplaced"] = int(np.sum(np.array(td) > 5.0))

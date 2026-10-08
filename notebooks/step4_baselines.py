@@ -16,7 +16,8 @@
 #              projected ground-truth centerline (flowsplat.baselines.kymo)
 #   b3         static R2-Gaussian geometry at defaults (step2_geom_init.py
 #              INIT=r2g, about 14 min per case); FLOWSPLAT_B3_MAX = new cases
-#              per run (default all)
+#              per run (default all); FLOWSPLAT_B3_CASES = explicit case list
+#              (a fresh session does not know which cases an earlier one did)
 #   eval       flowsplat.baselines.table -> results/step4.1_test_table.json
 # The oracle (b4) needs no GPU and is part of eval.
 #
@@ -67,9 +68,10 @@ def _(Path, mo, os, sys):
     B4 = WORK / "step4"
     PARTS = os.environ.get("FLOWSPLAT_PARTS", "flowsplat,b1,b2,eval").split(",")
     B3_MAX = int(os.environ.get("FLOWSPLAT_B3_MAX", "1000"))
+    B3_CASES = [c for c in os.environ.get("FLOWSPLAT_B3_CASES", "").split(",") if c]
     K = sw.K60  # Gate 1 k (60 views, 15 training cases, median rule)
     print("parts:", PARTS, "| k:", K)
-    return B3_MAX, B4, DATA, DRGS_DIR, FLOWSPLAT_DIR, K, PACK, PARTS, RENDER, RES, kymo, md, rt, sw, table
+    return B3_CASES, B3_MAX, B4, DATA, DRGS_DIR, FLOWSPLAT_DIR, K, PACK, PARTS, RENDER, RES, kymo, md, rt, sw, table
 
 
 @app.cell
@@ -219,13 +221,13 @@ def _(AX, B4, CASES, DATA, PARTS, RENDER, b1_done, json, kymo, md, np, rt, sw):
 
 
 @app.cell
-def _(B3_MAX, B4, CASES, PARTS, RES, b2_done, run_nb):
+def _(B3_CASES, B3_MAX, B4, CASES, PARTS, RES, b2_done, run_nb):
     # Baseline 3: static R2-Gaussian geometry (defaults), FLOWSPLAT_B3_MAX new cases per run
     _ = b2_done
     b3_done = False
     if "b3" in PARTS:
         _w = B4.parent
-        _miss = [c for c in CASES if not (_w / "step2_1" / f"{c}_v60_r2g" / "geom_init.npz").exists()]
+        _miss = [c for c in (B3_CASES or CASES) if not (_w / "step2_1" / f"{c}_v60_r2g" / "geom_init.npz").exists()]
         _todo = _miss[:B3_MAX]
         print("b3: R2-Gaussian missing for", len(_miss), "cases; this run:", _todo, flush=True)
         if _todo:
