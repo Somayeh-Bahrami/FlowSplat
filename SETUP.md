@@ -117,6 +117,8 @@ The choice is kept in `~/flowsplat_work/cuda_option.json`; delete it (or set
 | 2.2 flow fit (final, Gate 1) | molab | `FLOWSPLAT_INIT=4drgs FLOWSPLAT_MODE=val20 FLOWSPLAT_VARIANTS=frozen FLOWSPLAT_R_SCALE=<k> python notebooks/step2_train.py` | `results/step2.2_val20_v<views>_4drgs_cal*.json`, `~/flowsplat_work/step2_2/*/estimate.npz` |
 | 3.1 sweeps | molab | `FLOWSPLAT_SWEEPS=<settings or groups> python notebooks/step3_sweeps.py` (builds what is missing, skips finished settings) | `results/step3.1_sweeps.json`, `results/step2.2_sweep_*.json` |
 | 3.1 FFR (run 8) | M4 | `flowsplat.metrics.ffr_case` on the run 8 estimates (data/step2.2_run8_k15) | `results/step3.1_ffr_val20_v60.json` |
+| 4.1 baselines + main table | molab | `FLOWSPLAT_PARTS=flowsplat,b1,b2,eval python notebooks/step4_baselines.py`; then `FLOWSPLAT_PARTS=b3,eval FLOWSPLAT_B3_CASES=<list>` per chunk (R2-Gaussian, about 15 min per case) | `results/step2.2_test_v60_4drgs_cal.json`, `~/flowsplat_work/step4/{b1,b2}/*.npz`, `results/step4.1_test_table.json` |
+| 4.1 table from downloads | M4 | `flowsplat.baselines.table.build(cases, data/step4.1_merged, ...)` (merge the per-chunk downloads first) | `results/step4.1_test_table.json` |
 | 0.1 4DRGS only | molab | `FLOWSPLAT_ONLY_4DRGS=1 python notebooks/step0_setup.py`; dependencies only: `FLOWSPLAT_4DRGS_BUILD_ONLY=1` | `results/step0.1_4drgs.json` (nothing saved in build-only mode) |
 
 Flags shared by the Step 2 notebooks (Step 3.1): `FLOWSPLAT_DATA_DIR`,

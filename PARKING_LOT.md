@@ -13,3 +13,4 @@ not worked on until then (plan, Focus Rules).
 | Oct 7 | Examine 131_1 as a failure case (throat mis-sized at every view count) | Step 3.1 views sweep |
 | Oct 7 | Recalibrate k per noise level or estimate it from the data | Step 3.1 noise high: Q 20.9 % |
 | Oct 7 | Lesion finder: minimum length or contrast check against false narrowings | Step 3.1: 3 misplaced lesions in about 230 runs |
+| Oct 8 | Hard-regime comparison FlowSplat vs B1 (30 views, fast flow, high noise) on the test split | Step 4.1: B1 within 1 point of FlowSplat at 60 views (p = 0.52); plan fallback content, Gate 2 decision |
