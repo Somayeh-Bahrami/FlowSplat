@@ -1,7 +1,8 @@
 # Step 3.1: Sweeps and FFR
 
-Dates: Oct 20 to Oct 26, 2026 (plan; started Oct 6). Status: **in progress**
-(FFR done on the validation set; sweeps queued on molab).
+Dates: Oct 20 to Oct 26, 2026 (plan; done Oct 6 to 7). Status: **closed, DoD
+met** (sweep tables saved; FFR MAE 0.030 and accuracy 90 % at 0.80 on the
+20 validation cases, 60 views). Fallback: not needed.
 
 Plan DoD: "Sweep tables saved; FFR MAE and accuracy at 0.80 on validation set."
 Method for all runs: Gate 1 method (reports/gate1.md): 4DRGS init, radius x k
@@ -14,7 +15,7 @@ Method for all runs: Gate 1 method (reports/gate1.md): 4DRGS init, radius x k
 | `src/flowsplat/ffr.py`, `metrics.py` | M4 (and inside notebooks/step2_train.py on molab) |
 | `src/flowsplat/sweeps.py` | M4 (edits, tests, collection); molab (TIGRE rendering) |
 | `notebooks/step3_sweeps.py` | molab GPU |
-| `tests/test_sweeps_ffr.py` | M4; whole suite 96 tests pass |
+| `tests/test_sweeps_ffr.py` | M4; whole suite 96 tests pass (Oct 7) |
 
 ## Decisions (user, Oct 6)
 
@@ -163,4 +164,67 @@ Oct 7, molab, repo `8e64d89`.
   misplaced" (throat found > 5 mm from the true throat) counts these: 1 in
   fore_60, 1 each at 30 and 133 views (122_2 16.8 mm, 121_3 14.9 mm), 0
   elsewhere, 0 in run 8.
+
+### 4DRGS repeats (Gate 1 addition; 5 validation cases, 60 views)
+
+Oct 7, molab, repo `9889280`. Four independent 4DRGS runs on the same data
+(run 8 + repeat 1 to 3), each followed by the same Step 2.2 fit.
+
+| Run | Q err mean | Diam. err mean | FFR MAE / acc. | 4DRGS v2 pass |
+|---|---|---|---|---|
+| run 8 | 4.4 % | 0.083 mm | 0.060 / 80 % | 5 / 5 |
+| repeat 1 | 3.3 % | 0.098 mm | 0.068 / 80 % | 5 / 5 |
+| repeat 2 | 4.0 % | 0.100 mm | 0.063 / 80 % | 5 / 5 |
+| repeat 3 | 4.5 % | 0.094 mm | 0.065 / 80 % | 5 / 5 |
+
+Per-case standard deviation over the 4 runs (results/step3.1_sweeps.json,
+repeat_spread): Q 0.1 to 1.4 points (mean 0.8), diameter 0.001 to 0.052 mm
+(mean 0.022), FFR 0.001 to 0.053 (mean 0.021; largest on the severe lesion
+130_0, FFR 0.51 to 0.63 against 0.577). The 4DRGS randomness is small
+compared with the case-to-case errors; the run 6 vs run 7 change on 131_0
+(0.43 vs 0.18 mm) was the extreme of this spread together with the
+different k.
+
+## Summary of all sweeps (frozen, Gate 1 method)
+
+| Factor | Levels | Q err mean | Diam. err mean (mm) | FFR MAE (case CFR) |
+|---|---|---|---|---|
+| Views (20 val) | 30 / **60** / 133 | 7.8 / **5.3** / 3.8 % | 0.171 / **0.104** / 0.112 | 0.063 / **0.030** / 0.040 |
+| Noise (5 val) | low / **default** / high | 6.1 / **4.4** / 20.9 % | 0.111 / **0.083** / 0.157 | 0.083 / **0.060** / (0.025, errors cancel) |
+| Dispersion (5 val) | **default** / D 1e-5 / D 1e-4 | **4.4** / 3.6 / 4.5 % | **0.083** / 0.115 / 0.104 | **0.060** / 0.070 / 0.073 |
+| Rest velocity (5 val) | 0.10 / **default** / 0.25 / 0.40 m/s | 3.3 / **4.4** / 4.4 / 6.3 % | 0.145 / **0.083** / 0.058 / 0.139 | 0.048 / **0.060** / n.v. / n.v. |
+| Out-of-plane angle (5 val) | 0 / 30 / 60 deg | 4.5 / 1.7 / 4.9 % | 0.118 / 0.053 / 0.148 | 0.081 / 0.040 / 0.531 (0.073 w/o 135_0) |
+| 4DRGS repeats (5 val) | 4 runs | 3.3 to 4.5 % | 0.083 to 0.100 | 0.060 to 0.068 |
+
+Bold: run 8 (middle level). n.v.: ground-truth FFR not valid at that flow.
+
+**Answer to the week question ("Are results robust?").** Q is robust to the
+number of views, dispersion (Pe down to about 240), flow speed up to
+0.40 m/s, out-of-plane angle and 4DRGS randomness (all 1.7 to 7.8 %). It
+is not robust to high noise (20.9 %), because the radius calibration is
+noise-level specific. FFR follows the lesion geometry: about 0.03 at 60
+views and above, larger at 30 views, and it fails when the GT-free lesion
+finder picks a false narrowing (3 of about 230 runs).
+
+## DoD
+
+| DoD part | Result | Met |
+|---|---|---|
+| Sweep tables saved | results/step3.1_sweeps.json; tables above (views, noise, Peclet, flow speed, foreshortening, repeats) | **Yes** |
+| FFR MAE and accuracy at 0.80 on the validation set | MAE 0.030, accuracy 90 % (sens. 3 / 4, spec. 15 / 16), 20 val cases, 60 views, case CFR; population CFR: 0.079 / 85 % | **Yes** |
+
+**DoD met: yes. Fallback used: no** (plan fallback "If FFR error is large:
+decompose with the oracle; center the paper on Q and present FFR as an
+application": the oracle decomposition is reported anyway; FFR error is
+not large at 60 views).
+
+## Known limitations
+
+- Radius calibration k depends on the view count (recalibrated) and on the
+  noise level (not recalibrated: high noise fails).
+- FFR needs the CFR (case CFR assumed; population CFR adds about 0.05 MAE).
+- Only 4 of 20 validation cases have FFR <= 0.80.
+- GT-free lesion finder: 3 false picks in about 230 runs.
+- Flow-sweep ground-truth FFR is unphysical at 0.25 and 0.40 m/s (FFR_MIN
+  of data_gen not enforced there).
 

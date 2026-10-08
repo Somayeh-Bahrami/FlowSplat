@@ -1,0 +1,62 @@
+% Step 3.1: FFR and robustness sweeps (validation split).
+% Numbers from results/step3.1_ffr_val20_v60.json, results/step3.1_ffr_extraction_floor.json,
+% results/step3.1_sweeps.json (all settings, Gate 1 method: 4DRGS initialization, calibrated radius, fixed geometry).
+% Bib keys: thakur2026punch, young1973flow.
+
+\paragraph{FFR.}
+FFR is computed with the Young--Tsai model~\cite{young1973flow} from the
+recovered geometry and flow, without ground truth: the lesion is located
+at the largest relative radius deficit against a reference interpolated
+from the neighboring segments, and its length is taken from the width of
+the deficit. Because the bolus is imaged at rest, the hyperemic flow is the
+recovered rest flow times the coronary flow reserve (CFR). With the CFR of
+each case, FlowSplat reaches an FFR mean absolute error of 0.030 and 90\,\%
+accuracy at the 0.80 threshold on 20 validation cases (60 views); with a
+single population CFR of 2.75 the error rises to 0.079 (85\,\%), and the
+same population CFR applied to the true geometry and flow already gives
+0.071, so CFR uncertainty, not reconstruction, dominates in that setting.
+An oracle decomposition shows that the FFR error stems from the lesion
+geometry: with the true lesion and our flow the error is 0.012, with our
+lesion and the true flow 0.034. The lesion extraction itself contributes
+0.011 on the ground-truth profiles of all 200 cases.
+
+\paragraph{Robustness.}
+Table~\ref{tab:sweeps} varies one factor at a time around the 60-view
+setting. The flow error stays between 1.7\,\% and 7.8\,\% across 30 to 133
+views (with the radius calibration repeated per view count), dispersion up
+to Péclet numbers of about 240, more than an order of magnitude below the
+regime reported by PUNCH~\cite{thakur2026punch}, rest velocities from 0.10
+to 0.40\,m/s, out-of-plane angles from 0 to 60\,deg, and four independent
+reconstructions of the same data (per-case standard deviation 0.8 points).
+The method is not robust to strong detector noise (flow error 20.9\,\%):
+the reconstructed lumen becomes thinner and the calibration, obtained at
+the default noise level, no longer compensates it. The FFR error follows
+the lesion geometry; it doubles at 30 views (0.063) and fails when the
+lesion finder picks a false narrowing, which happened in 3 of about 230
+reconstructions.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Robustness on the validation split (one factor varied, all others
+at the 60-view setting in bold). Flow: mean relative error of $Q$;
+diameter: mean stenosis diameter error; FFR: mean absolute error with the
+case CFR. 20 validation cases for the views, 5 otherwise.
+n.v.: ground-truth FFR not valid at that flow.}
+\label{tab:sweeps}
+\begin{tabular}{llccc}
+\toprule
+Factor & Level & Flow err. & Diam. err. (mm) & FFR MAE \\
+\midrule
+Views & 30 / \textbf{60} / 133 & 7.8 / \textbf{5.3} / 3.8\,\% & 0.17 / \textbf{0.10} / 0.11 & 0.063 / \textbf{0.030} / 0.040 \\
+Noise & low / high & 6.1 / 20.9\,\% & 0.11 / 0.16 & 0.083 / -- \\
+Dispersion $D$ & $10^{-5}$ / $10^{-4}$\,m$^2$/s & 3.6 / 4.5\,\% & 0.12 / 0.10 & 0.070 / 0.073 \\
+Rest velocity & 0.10 / 0.25 / 0.40\,m/s & 3.3 / 4.4 / 6.3\,\% & 0.15 / 0.06 / 0.14 & 0.048 / n.v. / n.v. \\
+Out of plane & 0 / 30 / 60\,deg & 4.5 / 1.7 / 4.9\,\% & 0.12 / 0.05 / 0.15 & 0.081 / 0.040 / 0.073$^\ast$ \\
+Repeats & 4 runs & 3.3--4.5\,\% & 0.08--0.10 & 0.060--0.068 \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+{\footnotesize $^\ast$ without one case with a misplaced lesion (0.531 with it). Noise high: FFR errors of geometry and flow cancel (0.025), not reported.}
+\end{table}
