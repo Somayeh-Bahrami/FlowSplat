@@ -85,3 +85,11 @@ results/step4.1_test_table.json (all methods, B3 on 10 cases so far).
 - Chunks 2 (133_*, 612_*) and 3 (639_*, 641_*) pending; notebook now takes
   FLOWSPLAT_B3_CASES so a fresh session does not repeat chunk 1.
 
+### B3 chunk 2: 133_* and 612_* (Oct 8, repo `729943c`)
+
+- R2-Gaussian radius MAE: 133_* 0.42 to 1.39 mm (patient 133 fails badly),
+  612_* 0.19 to 0.27 mm; 12 to 23 min per case.
+- B3 on 20 of 30 cases: hyperemic Q error 41.6 % (mean), diameter error
+  0.57 mm (13 of 20 lesions in the window, 1 / 13 below 0.2 mm), FFR raw MAE
+  10.1 (clipped 0.71), accuracy 15 % (all 20 called significant).
+
