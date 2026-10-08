@@ -76,3 +76,22 @@ def q_summary(q_rel_err, cut=0.10):
     q = np.asarray(q_rel_err, float)
     return {"mean": float(q.mean()), "median": float(np.median(q)), "max": float(q.max()),
             "frac_below": float((q < cut).mean()), "n": int(len(q))}
+
+
+def diam_err_from_geometry(xyz_lumen, r_est, case, tol_mm=2.0):
+    """Stenosis diameter error of any estimated geometry (lumen frame, mm),
+    with the Step 2.2 rule (train.evaluate): estimated points whose nearest
+    GT centerline point lies in the lesion window |s - s0| <= L / 2 and
+    within tol_mm; throat = min radius; error = 2 |R_min - r_min,GT|.
+    None when no point falls in the window. Ref: plan Step 2.2 DoD; OURS."""
+    import json
+
+    from scipy.spatial import cKDTree
+
+    p = json.loads(str(case["params"]))
+    d, j = cKDTree(case["xyz_mm"]).query(np.asarray(xyz_lumen, float))
+    s_gt = case["s"][j]
+    les = (np.abs(s_gt - p["stenosis_center_mm"]) <= p["stenosis_len_mm"] / 2) & (d < tol_mm)
+    if not les.any():
+        return None
+    return float(2 * abs(float(np.asarray(r_est)[les].min()) - p["r_min_mm"]))

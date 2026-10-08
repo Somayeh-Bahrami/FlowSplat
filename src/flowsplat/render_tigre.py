@@ -152,9 +152,11 @@ def tigre_geo(gd):
 
 
 def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True,
-                noise_poisson=NOISE_POISSON, noise_gauss=NOISE_GAUSS):
+                noise_poisson=NOISE_POISSON, noise_gauss=NOISE_GAUSS, fixed_angle_deg=None):
     """Project all frames of one case (Step 1.1 case file with the stenosed
     radius r_mm, Step 1.2 bolus file). Returns (proj float16 [T, nv, nu], meta).
+    fixed_angle_deg: every frame from this one gantry angle (a conventional
+    fixed-view angiogram; Step 4.1 baseline 2), else the rotational sweep.
 
     Runs on: molab GPU. Ref: TIGRE tigre.Ax and CTnoise.add, used as in
     R2-Gaussian data_generator/synthetic_dataset/generate_data.py.
@@ -171,7 +173,8 @@ def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True
     shape = [lum["shape"][p] for p in perm]
     gd = tigre_geometry_dict(shape)
     geo = tigre_geo(gd)
-    angles = np.deg2rad(b["angles_deg"]).astype(np.float32)
+    angles_deg = b["angles_deg"] if fixed_angle_deg is None else np.full(len(b["angles_deg"]), float(fixed_angle_deg))
+    angles = np.deg2rad(angles_deg).astype(np.float32)
     rng = np.random.default_rng(seed)
     vol = np.zeros(shape, dtype=np.float32)
     projs = np.zeros((len(angles), gd["nDetector"][0], gd["nDetector"][1]), dtype=np.float32)
@@ -186,7 +189,7 @@ def render_case(case_npz, bolus_npz, axcodes, seed=0, mu=MU_I_PER_MM, noise=True
     meta = {"geometry": gd, "axis_perm": perm, "axcodes": axcodes, "mu_per_mm": mu,
             "lumen": {k: lum[k] for k in ("shape", "origin_mm", "vox_mm")}, "n_lumen_voxels": int(len(idx)),
             "noise": {"poisson": noise_poisson, "gaussian": list(noise_gauss)} if noise else None,
-            "view_subsets": view_subsets(len(angles))}
+            "view_subsets": view_subsets(len(angles)), "fixed_angle_deg": fixed_angle_deg}
     return projs.astype(np.float16), meta
 
 

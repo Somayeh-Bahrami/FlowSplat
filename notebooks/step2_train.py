@@ -14,7 +14,7 @@
 #   d) results/step2.2_<mode>_v<views>.json, per-case figures
 #
 # Run from the repo root:  python notebooks/step2_train.py
-# FLOWSPLAT_MODE = overfit (one case, default) | val20 (20 validation cases)
+# FLOWSPLAT_MODE = overfit (one case, default) | val20 (20 validation cases) | test (Step 4.1)
 # FLOWSPLAT_VIEWS = 60 (default) | 30;  FLOWSPLAT_CASES = comma list (overrides)
 # FLOWSPLAT_VARIANTS = comma list of base, frozen, pose, pose_arr (default: all;
 #   the Step 2.2 fallback variants, see train.VARIANTS)
@@ -118,6 +118,8 @@ def _(DATA, MODE, PACK, RENDER, json, np, os, rt, tigre_ready, zipfile):
         CASES = os.environ["FLOWSPLAT_CASES"].split(",")
     elif MODE == "overfit":
         CASES = ["121_0"]
+    elif MODE == "test":  # Step 4.1: held-out test split (all its cases)
+        CASES = json.loads((DATA / "splits.json").read_text())["cases"]["test"]
     else:
         CASES = _ordered[:20]
     RENDER.mkdir(parents=True, exist_ok=True)
