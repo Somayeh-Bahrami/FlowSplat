@@ -673,3 +673,36 @@ def world_to_lumen(world_mm, lumen, axis_perm):
     _, m = lumen_to_world(np.zeros((1, 3)), lumen, axis_perm)
     idx = (np.asarray(world_mm, dtype=float) / vox - 0.5 + n_xyz / 2) @ m
     return np.asarray(lumen["origin_mm"]) + idx * vox
+
+
+def run_fourdrgs(render_npz, base_dir, drgs_dir, n_views=60, iters=10000):
+    """Official 4DRGS on one rendered case and its time-averaged VQR volume
+    in the lumen frame; the same steps as notebooks/step2_geom_init.py
+    (INIT=4drgs), as a function for Step 5.1. Runs on: molab GPU.
+    Returns (vol_lumen, info). Ref: 4DRGS code (train.py, test.py); OURS."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import SimpleITK as sitk
+
+    base = Path(base_dir)
+    d, m = base / "data", base / "model"
+    z = np.load(render_npz)
+    meta = json.loads(str(z["meta"]))
+    write_4drgs_case(render_npz, d)
+    fv, _ = fdk_volume_lumen_frame(render_npz, n_views=n_views)
+    n_above = int((fv * meta["mu_per_mm"] > FOURDRGS_THRES_FDK).sum())
+    m1 = fourdrgs_m1(n_above)
+    vq = m / "train" / "VQR_output" / "vol_pred.nii.gz"
+    if vq.exists():
+        vq.unlink()
+    common = [f"-m={m}", f"-s={d}", f"--Nviews={n_views}", f"--iteration={iters}"]
+    r = subprocess.run([sys.executable, "train.py", *common, f"--ADC_until_iter={iters // 2}", "--fdk_toolbox=tigre",
+                        f"--M1={m1}", "--save_iterations", str(iters)], cwd=str(drgs_dir),
+                       capture_output=True, text=True)
+    if not vq.exists():
+        raise RuntimeError(f"4DRGS gave no VQR volume (exit {r.returncode}): {r.stderr[-1500:]}")
+    vol = fourdrgs_volume_to_lumen_frame(sitk.GetArrayFromImage(sitk.ReadImage(str(vq))), meta["axis_perm"])
+    return vol, {"m1": m1, "n_fdk_above": n_above, "train_exit": r.returncode}

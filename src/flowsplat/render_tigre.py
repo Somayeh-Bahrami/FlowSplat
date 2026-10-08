@@ -39,13 +39,14 @@ NOISE_GAUSS = (0.0, 10.0)
 VIEW_SETS = (30, 60, 133)
 
 
-def lumen_voxels(s_mm, xyz_mm, r_mm, vox_mm=VOX_MM, pad_mm=PAD_MM, dense_mm=0.1):
+def lumen_voxels(s_mm, xyz_mm, r_mm, vox_mm=VOX_MM, pad_mm=PAD_MM, dense_mm=0.1, origin_mm=None, shape=None):
     """Voxels of the tube {x : |x - axis(s*)| < r(s*)} with linear partial volume.
 
     s* is the nearest point of the (densified) centerline. Fraction per voxel:
     clip((r - d) / vox + 0.5, 0, 1). Returns a dict with integer voxel indices
     (N, 3) in the grid of shape `shape` starting at `origin_mm`, `frac` and
-    the arc length `s_vox` of the nearest centerline point.
+    the arc length `s_vox` of the nearest centerline point. `origin_mm` and
+    `shape` fix a common grid (Step 5.1 trees: one grid for all branches).
 
     Ref: OURS (tube from centerline + radius; the lumen model A = pi r^2 of
     the plan). The fallback of the plan (concentration on the centerline,
@@ -55,8 +56,11 @@ def lumen_voxels(s_mm, xyz_mm, r_mm, vox_mm=VOX_MM, pad_mm=PAD_MM, dense_mm=0.1)
     sd = np.arange(0.0, s_mm[-1] + 1e-9, dense_mm)
     xd = np.stack([np.interp(sd, s_mm, xyz_mm[:, k]) for k in range(3)], axis=1)
     rd = np.interp(sd, s_mm, r_mm)
-    origin = xd.min(0) - rd.max() - pad_mm
-    shape = np.ceil((xd.max(0) + rd.max() + pad_mm - origin) / vox_mm).astype(int) + 1
+    if origin_mm is None:
+        origin = xd.min(0) - rd.max() - pad_mm
+        shape = np.ceil((xd.max(0) + rd.max() + pad_mm - origin) / vox_mm).astype(int) + 1
+    else:
+        origin, shape = np.asarray(origin_mm, dtype=float), np.asarray(shape, dtype=int)
     # candidate voxels: local boxes around every 4th dense sample
     cand = []
     for x, r in zip(xd[::4], rd[::4]):
