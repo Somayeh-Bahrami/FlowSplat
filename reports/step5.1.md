@@ -46,6 +46,21 @@ vessel only; bifurcation becomes future work. The paper remains valid."
 | `notebooks/step5_tree.py` | molab GPU |
 | `tests/test_tree.py` | M4 (toy Y fit recovers the split); whole suite 114 tests pass |
 
+## Data (M4, Oct 8, repo `2662c6e`)
+
+`python -m flowsplat.tree --imagecas_dir <ImageCAS> --out data/trees_v1
+--per_geom 2 --pack data/step5_tree_pack.zip` (about 15 min, 12.9 MB pack).
+40 geometries, 80 cases: dev 16 geometries (32 cases), test 24 geometries
+(48 cases); runs on case _0: 16 dev, 24 test
+(results/step5.1_splits_tree.json, results/step5.1_data_summary.json, QC
+figures results/step5.1_qc/).
+- Diagonal flow fraction 0.14 to 0.51 (median 0.31).
+- Stenosis in the parent in 30 of 80 cases, else in the LAD daughter; FFR
+  <= 0.80 in 28 of 80.
+- Rest transit: parent 0.11 to 0.91 s, LAD daughter 0.42 to 2.61 s,
+  diagonal 0.41 to 2.06 s (each branch spans several 60-view intervals of
+  0.074 s).
+
 ## Results
 
-Pending.
+Pending (molab).
