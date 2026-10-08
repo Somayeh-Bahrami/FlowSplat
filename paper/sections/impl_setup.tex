@@ -1,6 +1,7 @@
 % Step 0.1: implementation details (environment and rasterizer check).
 % Numbers from results/step0.1.json and results/step0.1_imagecas.json.
-% Bib keys to add to the .bib: zha2024r2gaussian, biguri2016tigre, zeng2023imagecas.
+% Numbers for 4DRGS from results/step0.1_4drgs.json and the step2.1 4DRGS logs (time.txt).
+% Bib keys: zha2024r2gaussian, biguri2016tigre, zeng2023imagecas, liu2025fourdrgs.
 
 \paragraph{Implementation details.}
 We build on the official R$^2$-Gaussian code~\cite{zha2024r2gaussian}, whose
@@ -19,3 +20,10 @@ $256^3$ volume of 0.37\,mm voxels, projected with the R$^2$-Gaussian cone-beam
 protocol (50 views over $360^\circ$, Poisson and Gaussian noise), and
 reconstructed with default settings. The result recovers the vessel with a
 Dice score of 0.977 and a 3D PSNR of 45.17\,dB in 5.5 minutes.
+The geometry initialization uses the official 4DRGS
+code~\cite{liu2025fourdrgs}, also unmodified, in its fast setting
+(10k iterations, densification until 5k); it reproduces the authors'
+reported held-out PSNR on their example case (36.26 versus 36.35\,dB) and
+takes about 1.5 minutes per vessel. The transport-constrained Gaussians
+are rendered by an exact per-ray line-integral projector written in
+PyTorch, since a vessel needs only about 300 Gaussians.

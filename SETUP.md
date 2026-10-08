@@ -106,24 +106,34 @@ The choice is kept in `~/flowsplat_work/cuda_option.json`; delete it (or set
    then generates projections, trains (about 13 min) and writes
    `results/step0.1_imagecas.json` and `results/step0.1_imagecas.png`.
 
-### Steps 1.1 to 2.1 (data and geometry init)
+### Steps 1.1 to 3.1 (data, geometry init, flow fit, sweeps)
 
 | Step | Where | Command / notebook | Output |
 |---|---|---|---|
 | 1.1 cases | M4 | `PYTHONPATH=src python3 -m flowsplat.data_gen --imagecas_dir <labels> --out data/cases_v1 --n_geom 40 --per_geom 5 --seed 0` | `data/cases_v1/` (2.4 min) |
 | 1.2 bolus + pack | M4 | `PYTHONPATH=src python3 -m flowsplat.bolus_sim --cases data/cases_v1 --out data/bolus_v1 --seed 0 --pack data/step1_pack.zip` | `data/bolus_v1/`, `data/step1_pack.zip` (9 MB, 13 min) |
 | 1.2 render | molab | upload the pack, `python notebooks/step1_render.py` (`FLOWSPLAT_RENDER_LIMIT=N` for a trial) | `~/flowsplat_work/data/render_v1/` (200 x 133 frames, 2.86 GB, 25 min) |
-| 2.1 geometry init | molab | `python notebooks/step2_geom_init.py` (`FLOWSPLAT_INIT=fdk` default, `r2g` for the plan route) | `results/step2.1_*`, `~/flowsplat_work/step2_1/*/geom_init.npz` |
-| 0.1 4DRGS only | molab | `FLOWSPLAT_ONLY_4DRGS=1 python notebooks/step0_setup.py` | `results/step0.1_4drgs.json` |
+| 2.1 geometry init (final, Gate 1) | molab | `FLOWSPLAT_INIT=4drgs python notebooks/step2_geom_init.py` (`fdk`, `r2g`: earlier routes); calibration: `FLOWSPLAT_SPLIT=train FLOWSPLAT_N_CASES=15` | `results/step2.1_geom_init_v<views>_4drgs*.json`, `~/flowsplat_work/step2_1/<case>_v<views>_4drgs*/` |
+| 2.2 flow fit (final, Gate 1) | molab | `FLOWSPLAT_INIT=4drgs FLOWSPLAT_MODE=val20 FLOWSPLAT_VARIANTS=frozen FLOWSPLAT_R_SCALE=<k> python notebooks/step2_train.py` | `results/step2.2_val20_v<views>_4drgs_cal*.json`, `~/flowsplat_work/step2_2/*/estimate.npz` |
+| 3.1 sweeps | molab | `FLOWSPLAT_SWEEPS=<settings or groups> python notebooks/step3_sweeps.py` (builds what is missing, skips finished settings) | `results/step3.1_sweeps.json`, `results/step2.2_sweep_*.json` |
+| 3.1 FFR (run 8) | M4 | `flowsplat.metrics.ffr_case` on the run 8 estimates (data/step2.2_run8_k15) | `results/step3.1_ffr_val20_v60.json` |
+| 0.1 4DRGS only | molab | `FLOWSPLAT_ONLY_4DRGS=1 python notebooks/step0_setup.py`; dependencies only: `FLOWSPLAT_4DRGS_BUILD_ONLY=1` | `results/step0.1_4drgs.json` (nothing saved in build-only mode) |
+
+Flags shared by the Step 2 notebooks (Step 3.1): `FLOWSPLAT_DATA_DIR`,
+`FLOWSPLAT_RENDER_DIR` (sweep data folders) and `FLOWSPLAT_RUN_TAG`
+(suffix of work folders and result files).
 
 molab storage does not survive a session reset. After rendering, download
 `render_v1` in 8 parts of about 360 MB (5 patients each) with
 `mo.download` and unzip into `data/render_v1/` on the M4 (gitignored);
 re-upload what a later notebook needs.
 
-### Known open issue
+### 4DRGS build notes (resolved Oct 4)
 
-4DRGS: `diff-Xray-gaussian-rasterization-voxelization-sortfree` failed with
-`namespace "std" has no member "uintptr_t"` (missing `<cstdint>`). Since
-Oct 4 the 4DRGS cell retries with the `NVCC_APPEND_FLAGS` flag of step 7;
-not yet run (`FLOWSPLAT_ONLY_4DRGS=1`). tiny-cuda-nn builds fine.
+The 4DRGS rasterizers fail on the first plain build with
+`namespace "std" has no member "uintptr_t"` (GCC 14, missing `<cstdint>`);
+the setup notebook retries with `NVCC_APPEND_FLAGS="-include cfloat -include
+cstdint"` (flag only), which works. These first-attempt errors therefore
+appear in every fresh-session log and are expected. LEAP is built with
+Ninja; 4DRGS's final mesh / ICP evaluation cannot run on molab (no
+libOpenGL, no reference mesh) and is not used.
