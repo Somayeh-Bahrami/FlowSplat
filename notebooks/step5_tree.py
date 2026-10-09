@@ -187,6 +187,7 @@ def _(RES, SET, json, rows, time, tree):
     _out = {"timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "set": SET,
             "n_cases": len(rows), "n_ok": len(_ok), "errors": {r["case"]: r["error"] for r in rows if "error" in r},
             "inlet_correct": sum(r["inlet_correct"] for r in _ok), "table": table, "cases": rows}
+    RES.mkdir(parents=True, exist_ok=True)  # missing on molab in the test run of Oct 9 (summary rebuilt on the M4)
     (RES / f"step5.1_tree_{SET}.json").write_text(json.dumps(_out, indent=2, default=float))
     for _v, _e in table.items():
         print(f"{_v:12s} n={_e['n']} split err {_e['split_err_mean']:.3f} (median {_e['split_err_median']:.3f}, "

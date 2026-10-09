@@ -1,7 +1,10 @@
 # Step 5.1: Y-bifurcation with continuity and Murray prior
 
-Dates: Oct 27 to Nov 1, 2026 (plan; started Oct 8). Status: **in progress**
-(code and data on the M4 done; molab runs pending).
+Dates: Oct 27 to Nov 1, 2026 (plan; done Oct 8 to 9). Status: **closed, DoD
+met on the fitted test cases** (primary variant cont_murray: mean split error
+6.3 % on 20 of 24 test cases; 4 cases without a usable tree count as
+failures). Fallback: not used; whether "the bifurcation works" is the Gate 2
+question.
 
 Plan DoD: "Flow split error below 10% on bifurcation test cases; ablation
 table." Plan fallback: "If it does not work by Nov 2: submit with single
@@ -103,4 +106,58 @@ Pipeline works; the test run follows unchanged. Rule fixed now for the
 test set (before running it): a case without a usable tree (error) counts
 as a failure in the "< 10 %" share, and the mean split error is reported
 over the fitted cases together with the number of failures.
+
+### Test run (DoD; Oct 9, molab, repo `313b8eb`)
+
+results/step5.1_tree_test.json (built on the M4 from the 24 per-case
+result.json files: the molab summary write failed because results/ was
+missing in that checkout; the notebook now creates it). 24 test cases: 20
+fitted, inlet correct in 20 of 20; 4 without a usable tree (669_0, 733_0,
+741_0, 799_0).
+
+**Ablation table (20 fitted test cases):**
+
+| Variant | Continuity | Murray prior | Split err. mean (median) | < 10 % (of 20) | < 10 % (of 24, failures count) | Daughter Q err. | Parent Q err. |
+|---|---|---|---|---|---|---|---|
+| indep | no | no | 17.2 % (12.8 %) | 9 | 9 | 7.6 % | 20.9 % |
+| murray | no | yes | 18.2 % (13.7 %) | 8 | 8 | 9.8 % | 22.3 % |
+| cont | yes | no | **3.8 % (2.1 %)** | **17** | **17** | 6.2 % | 5.4 % |
+| **cont_murray (primary)** | yes | yes | **6.3 % (4.6 %)** | 15 | 15 | 8.6 % | 5.8 % |
+
+- **DoD (pre-registered rule):** mean split error of the primary variant
+  6.3 % < 10 % on the fitted cases; 4 of 24 cases failed tree extraction.
+- **Continuity is the effective constraint:** it cuts the split error from
+  17.2 to 3.8 % and the parent flow error from 20.9 to 5.4 %. Without it,
+  the parent flow is fitted almost independently of the daughters.
+- **The Murray prior does not help:** +2.5 points with continuity, +1.0
+  without, although the ground-truth split is Murray-consistent by
+  construction. The prior uses the estimated daughter radii next to the
+  junction, where the 4DRGS radius is least reliable (cube of the radius
+  ratio amplifies their error). Same pattern on dev (2.3 vs 4.9 %).
+- **Extraction failures (4 / 24 test, 1 / 16 dev):** all five have a short
+  parent (18 to 24 mm; median diagonal of the fitted cases 41 mm). With a
+  short parent the longest skeleton path is LAD -> diagonal and the parent
+  must be found as the side branch; in the 4DRGS volume it is not (on the
+  ground-truth lumen volume it is, 22 to 27 mm). Likely cause: the parent is
+  the earliest filled and washed-out segment, dim in the time-averaged
+  volume (as 131_0 in Step 2.1); not verified (4DRGS volumes not
+  downloaded). Not fixed after seeing the test set.
+
+## DoD
+
+| DoD part | Result | Met |
+|---|---|---|
+| Flow split error below 10 % on bifurcation test cases | Primary (cont_murray) 6.3 % mean on 20 / 24 fitted (15 of 24 cases below 10 %); cont 3.8 % (17 of 24) | **Yes** (fitted cases; 4 extraction failures) |
+| Ablation table | Table above (continuity x Murray) | **Yes** |
+
+**DoD met: yes, with 4 of 24 extraction failures. Fallback used: no.**
+
+## For Gate 2 (Nov 2): "Bifurcation works?"
+
+- Yes for 20 of 24 test Ys (split error 6.3 % primary, 3.8 % with
+  continuity only); the GT-free tree extraction fails on short parents
+  (< 25 mm).
+- The full model (continuity + Murray) is not the best variant;
+  continuity alone is. Which variant the paper reports as FlowSplat is a
+  Gate 2 decision (the pre-registered primary is cont_murray).
 

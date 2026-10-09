@@ -1,0 +1,50 @@
+% Step 5.1: Y-bifurcation (LAD + diagonal), continuity and Murray prior.
+% Numbers from results/step5.1_tree_test.json (24 test bifurcations, 60 views) and step5.1_tree_dev_run2.json.
+% Bib keys: zeng2023imagecas, liu2025fourdrgs, thakur2026punch.
+
+\paragraph{Bifurcations.}
+We extend the transport model to a Y-shaped vessel: a parent segment and
+two daughters, each daughter starting at the junction with the parent's
+transit time, $\tau_i = \tau_J + \int_0^{s_i} A/Q_k\,\mathrm{d}s$, and one
+flow per branch. Continuity is enforced as a hard constraint by
+parameterizing $Q_p = Q_1 + Q_2$; Murray's law enters as a soft prior on the
+flow split, $(\log Q_1/Q_2 - 3\log R_1/R_2)^2$, because the geometry is kept
+fixed. The branches are extracted from the 4DRGS~\cite{liu2025fourdrgs}
+volume without ground truth (longest skeleton path and its longest side
+branch), and the inlet is chosen among the three free ends by the fit loss.
+The bifurcation set contains 40 left anterior descending arteries with their
+first diagonal from ImageCAS~\cite{zeng2023imagecas} with a Murray-consistent
+flow split, one stenosis, and the bolus transport of each branch simulated
+with the parent's outflow as inlet~\cite{thakur2026punch}; 24 geometries form
+the test set.
+
+\paragraph{Results.}
+Table~\ref{tab:bifurcation} reports the flow split error, the relative error
+of each daughter's share of the parent flow. With continuity, FlowSplat
+recovers the split with a mean error of 3.8\,\% and the parent flow with
+5.4\,\%; without it, the parent flow is fitted almost independently of the
+daughters and both errors rise to 17 to 21\,\%. The Murray prior does not
+help, even though the simulated split follows Murray's law: it relies on the
+reconstructed daughter radii next to the junction, where the reconstruction
+is least accurate. The automatic tree extraction failed on 4 of 24 test
+vessels, all with a parent shorter than 25\,mm, which is not resolved as a
+separate branch in the time-averaged reconstruction.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Bifurcation ablation on the test split (20 of 24 Y-bifurcations
+with a recovered tree, 60 views). Split error: mean relative error of the
+daughters' flow fractions $Q_k/Q_p$; flow errors relative to the true flows.}
+\label{tab:bifurcation}
+\begin{tabular}{cccccc}
+\toprule
+Continuity & Murray & Split err. & Split $<$10\,\% & Daughter $Q$ err. & Parent $Q$ err. \\
+\midrule
+ & & 17.2\,\% & 9/20 & 7.6\,\% & 20.9\,\% \\
+ & \checkmark & 18.2\,\% & 8/20 & 9.8\,\% & 22.3\,\% \\
+\checkmark & & \textbf{3.8\,\%} & \textbf{17/20} & \textbf{6.2\,\%} & \textbf{5.4\,\%} \\
+\checkmark & \checkmark & 6.3\,\% & 15/20 & 8.6\,\% & 5.8\,\% \\
+\bottomrule
+\end{tabular}
+\end{table}

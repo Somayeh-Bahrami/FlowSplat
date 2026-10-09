@@ -14,3 +14,5 @@ not worked on until then (plan, Focus Rules).
 | Oct 7 | Recalibrate k per noise level or estimate it from the data | Step 3.1 noise high: Q 20.9 % |
 | Oct 7 | Lesion finder: minimum length or contrast check against false narrowings | Step 3.1: 3 misplaced lesions in about 230 runs |
 | Oct 8 | Hard-regime comparison FlowSplat vs B1 (30 views, fast flow, high noise) on the test split | Step 4.1: B1 within 1 point of FlowSplat at 60 views (p = 0.52); plan fallback content, Gate 2 decision |
+| Oct 9 | Tree extraction for short parents (e.g. lower threshold near the ostium, or seed the parent from the inlet end) | Step 5.1: 5 of 40 Ys failed, all with parents < 25 mm |
+| Oct 9 | Murray prior from radii measured away from the junction | Step 5.1: prior with junction radii did not help |
