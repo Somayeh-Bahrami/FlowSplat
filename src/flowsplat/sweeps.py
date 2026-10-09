@@ -170,10 +170,11 @@ def resimulate_bolus(case, bolus, d_m2s=None):
 
 
 # ---------------------------------------------------------------- driver (molab)
-def make_setting_data(setting, base_data, out_dir, render=True, log=print):
+def make_setting_data(setting, base_data, out_dir, render=True, log=print, cases=None):
     """Write a pack-like folder for one setting: cases/, bolus/, geom/
     (links), splits.json, and render/ (TIGRE, molab). Returns out_dir.
-    Cases already written are skipped (resumable)."""
+    Cases already written are skipped (resumable). `cases` overrides the
+    setting's case list (Gate 2: the 30 test cases)."""
     spec = SETTINGS[setting]
     base = Path(base_data)
     out = Path(out_dir)
@@ -182,7 +183,7 @@ def make_setting_data(setting, base_data, out_dir, render=True, log=print):
     if not (out / "geom").exists():
         (out / "geom").symlink_to((base / "geom").resolve(), target_is_directory=True)
     (out / "splits.json").write_text((base / "splits.json").read_text())
-    for c in cases_of(setting):
+    for c in (cases or cases_of(setting)):
         g = c.split("_")[0]
         f_case, f_bol, f_ren = out / "cases" / f"{c}.npz", out / "bolus" / f"{c}.npz", out / "render" / f"{c}.npz"
         if f_ren.exists() or (not render and f_bol.exists()):

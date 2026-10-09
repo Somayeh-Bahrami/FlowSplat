@@ -43,8 +43,10 @@ def _ffr_rest(s, r, q_rest_m3s, p, xyz, case):
         return {}
 
 
-def evaluate_case(c, work, case_dir, bolus_dir, flowsplat_row, k):
-    """All methods on one test case; methods without their artifact are skipped."""
+def evaluate_case(c, work, case_dir, bolus_dir, flowsplat_row, k, geom_tag="v60_4drgs", b1_dir=None):
+    """All methods on one test case; methods without their artifact are
+    skipped. geom_tag / b1_dir select another run (Gate 2 hard regimes:
+    e.g. v30_4drgs, v60_4drgs_flow_v0.40)."""
     work = Path(work)
     case = np.load(Path(case_dir) / f"{c}.npz")
     p = json.loads(str(case["params"]))
@@ -52,7 +54,7 @@ def evaluate_case(c, work, case_dir, bolus_dir, flowsplat_row, k):
     q_gt = p["q_rest_mls"] * 1e-6
     out = {"case": c, "ffr_gt": p["ffr"], "q_gt_mls": p["q_rest_mls"], "q_hyp_gt_mls": p["q_hyp_mls"]}
     res = {}
-    g4 = work / "step2_1" / f"{c}_v60_4drgs" / "geom_init.npz"
+    g4 = work / "step2_1" / f"{c}_{geom_tag}" / "geom_init.npz"
     if g4.exists():
         s, xyz, r = _geom(g4, k)
         diam = mt.diam_err_from_geometry(xyz, r, case)
@@ -60,7 +62,7 @@ def evaluate_case(c, work, case_dir, bolus_dir, flowsplat_row, k):
             q = flowsplat_row["q_mm3s"] * 1e-9
             res["flowsplat"] = {"q_rel_err": abs(q - q_gt) / q_gt, "diam_err_mm": diam,
                                 **_ffr_rest(s, r, q, p, xyz, case)}
-        f1 = work / "step4" / "b1" / f"{c}_tdc.npz"
+        f1 = (Path(b1_dir) if b1_dir else work / "step4" / "b1") / f"{c}_tdc.npz"
         if f1.exists():
             curves = np.load(f1)["curves"]
             v, n = tdc.velocity_from_arrivals(s, tdc.half_rise_times(curves, t))
@@ -134,11 +136,29 @@ def summarize(rows):
     return table
 
 
-def build(cases, work, case_dir, bolus_dir, flowsplat_json, k):
+def build(cases, work, case_dir, bolus_dir, flowsplat_json, k, geom_tag="v60_4drgs", b1_dir=None):
     """Rows for all cases and the summary table."""
     fs = {}
     if flowsplat_json and Path(flowsplat_json).exists():
         d = json.loads(Path(flowsplat_json).read_text())
         fs = {r["case"]: r for r in d["cases"].values() if r["variant"] == "frozen"}
-    rows = [evaluate_case(c, work, case_dir, bolus_dir, fs.get(c), k) for c in cases]
+    rows = [evaluate_case(c, work, case_dir, bolus_dir, fs.get(c), k, geom_tag, b1_dir) for c in cases]
     return {"k": k, "cases": rows, "table": summarize(rows)}
+
+
+def paired_q(rows, a="flowsplat", b="b1_4drgs_tdc"):
+    """Paired comparison of the Q error of two methods (cases where both
+    exist): means, number of cases where a is better, Wilcoxon signed-rank
+    p (two-sided). Ref: Wilcoxon 1945 (scipy.stats.wilcoxon); OURS."""
+    from scipy.stats import wilcoxon
+
+    qa, qb = [], []
+    for r in rows:
+        m = r["methods"]
+        if a in m and b in m and "q_rel_err" in m[a] and "q_rel_err" in m[b]:
+            qa.append(m[a]["q_rel_err"])
+            qb.append(m[b]["q_rel_err"])
+    qa, qb = np.array(qa), np.array(qb)
+    p = float(wilcoxon(qa, qb).pvalue) if len(qa) >= 5 and np.any(qa != qb) else None
+    return {"n": int(len(qa)), "mean_a": float(qa.mean()), "mean_b": float(qb.mean()),
+            "a_better": int((qa < qb).sum()), "wilcoxon_p": p}

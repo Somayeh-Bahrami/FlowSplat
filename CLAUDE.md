@@ -134,3 +134,8 @@ registration + full draft. Nov 16 CVPR paper (no extension). Nov 23 supp.
   - Step 3.1 adds 3 repeat 4DRGS runs on 5 val cases (run-to-run spread).
 - Push finished steps to origin/main without asking (ask before force-push or
   history rewrite).
+- **Gate 2 (held Oct 9): bifurcation kept; FlowSplat on bifurcations =
+  continuity only (Murray prior reported as negative ablation); hard-regime
+  comparison vs B1 (30 views, 0.40 m/s, high noise) on the 30 test cases;
+  venue decided after it.** Details: reports/gate2.md.
+
