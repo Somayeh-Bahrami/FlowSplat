@@ -370,7 +370,11 @@ def render_tree_case(case_npz, bolus_npz, axcodes, seed=0, mu=None):
 
 
 # ============================ tree from a volume (no ground truth) ============================
-SIDE_MIN_MM = 20.0  # OURS: shortest skeleton side branch taken as the second daughter
+# OURS: shortest skeleton side branch taken as a branch. 20 mm until Oct 9;
+# dev run: 3 of 16 diagonals (28 to 33 mm) were shorter than that in the
+# 4DRGS skeleton (ends trimmed); the longest side branch is taken anyway,
+# so the minimum only guards against skeleton spurs (a few mm).
+SIDE_MIN_MM = 10.0
 
 
 def tree_from_volume(vol, vox_mm, origin_mm):
@@ -425,14 +429,26 @@ def tree_radii(vol, vox_mm, origin_mm, segs, median_n=5):
 
 
 def orientations(segs, radii):
-    """The two inlet hypotheses as (parent, daughter_lad, daughter_side), each
-    (s, xyz, r) with the parent ordered inlet -> junction and daughters from
-    the junction. Ref: OURS."""
+    """The three inlet hypotheses (inlet at end a of the main path, at end b,
+    or at the tip of the side branch) as (parent, daughter, daughter), each
+    (s, xyz, r) with the parent ordered inlet -> junction and the daughters
+    from the junction. All three free ends are tried because the longest
+    skeleton path need not contain the parent (dev run Oct 9: when the
+    diagonal is longer than the parent, the longest path runs LAD tip ->
+    diagonal tip and the parent is the side branch; 4 of 13 cases had the
+    wrong inlet with only two hypotheses). Ref: OURS."""
     (sa, xa), (sb, xb), (sc, xc) = segs
     ra, rb, rc = radii
-    h1 = [(sa, xa, ra), (sb, xb, rb), (sc, xc, rc)]
-    h2 = [(sb, xb[::-1].copy(), rb[::-1].copy()), (sa, xa[::-1].copy(), ra[::-1].copy()), (sc, xc, rc)]
-    return [h1, h2]
+
+    def rev(s, x, r):
+        return s, x[::-1].copy(), np.asarray(r)[::-1].copy()
+
+    arms = [rev(sa, xa, ra), (sb, xb, rb), (sc, xc, rc)]  # all start at the junction
+    hyps = []
+    for i in range(3):
+        others = [arms[j] for j in range(3) if j != i]
+        hyps.append([rev(*arms[i])] + others)
+    return hyps
 
 
 # ============================ transport on a tree ============================

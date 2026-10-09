@@ -63,4 +63,25 @@ figures results/step5.1_qc/).
 
 ## Results
 
-Pending (molab).
+### Dev run 1 (pipeline check; Oct 9, molab, repo `50fc354`)
+
+results/step5.1_tree_dev_run1.json. 16 dev cases: 13 fitted, 3 errors.
+- **Bug 1, wrong inlet (4 of 13: 115, 121, 130, 572).** The inlet was
+  chosen among the two ends of the longest skeleton path. In all four the
+  diagonal is longer than the parent (e.g. 121: parent 25 mm, diagonal
+  43 mm), so the longest path runs LAD tip -> diagonal tip and the parent is
+  the side branch; the true inlet was never a candidate. Then the parent and
+  a daughter are swapped and the flows are meaningless (split error 1.1 to
+  1.4 with continuity). Fix: all three free ends are inlet hypotheses
+  (tree.orientations), still chosen by the fit loss, no ground truth.
+- **Bug 2, no side branch (3 of 16: 594, 609, 656).** Diagonals of 28 to
+  33 mm came out shorter than the 20 mm minimum in the 4DRGS skeleton (ends
+  trimmed); on the ground-truth lumen volume all three are found. Fix:
+  minimum 10 mm (the longest side branch is taken anyway; the minimum only
+  guards against skeleton spurs).
+- **Where the inlet was right (9 cases)**, the method works: with continuity
+  the split error is 0.2 to 4.1 % (mean 1.8 %), parent flow error 1 to 9 %.
+  The Murray prior did not help there (cont_murray 1.4 to 14.6 %): it uses
+  the estimated daughter radii, which are less reliable near the junction.
+- Nothing was tuned on these results; both changes are bug fixes of the
+  GT-free tree extraction. Dev is run again before the test set.

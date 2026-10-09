@@ -109,6 +109,20 @@ def test_toy_fit_recovers_split():
     hyps = tree.orientations([(world[0][0], world[0][1]), (world[1][0], world[1][1]), (world[2][0], world[2][1])], s_r)
     m, info = tree.fit_tree(proj, thetas, times, hyps, pj, variant="cont", iters_dir=60, iters=400, log=lambda *a: None)
     assert info["direction"] == 0
+    assert len(hyps) == 3 and len(info["dir_loss"]) == 3
     met = tree.split_metrics(info["q_mm3s"], [2500.0, 0.68 * 2500.0, 0.32 * 2500.0], [0, 1])
     assert met["split_err"] < 0.05
     assert met["q_parent_rel_err"] < 0.05
+
+
+def test_orientations_cover_all_three_inlets():
+    br = _y_branches()
+    segs = [(br[0][0], br[0][1]), (br[1][0], br[1][1]), (br[2][0], br[2][1])]
+    hyps = tree.orientations(segs, [b[2] for b in br])
+    junction = br[0][1][-1]
+    inlets = []
+    for h in hyps:
+        assert np.allclose(h[0][1][-1], junction) and np.allclose(h[1][1][0], junction) and np.allclose(h[2][1][0], junction)
+        inlets.append(tuple(np.round(h[0][1][0], 3)))
+    assert len(set(inlets)) == 3
+    assert np.allclose(hyps[0][0][1], br[0][1])  # hypothesis 0 = original parent

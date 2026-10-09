@@ -19,7 +19,8 @@
 #
 # Run from the repo root:  python notebooks/step5_tree.py
 # FLOWSPLAT_TREE_SET = dev (default; 16 geometries, pipeline check) | test
-# (24 geometries, DoD); FLOWSPLAT_CASES = comma list (overrides).
+# (24 geometries, DoD); FLOWSPLAT_CASES = comma list (overrides);
+# FLOWSPLAT_TREE_RERUN=1 refits cases that have a result (cached 4DRGS volumes are reused).
 
 import marimo
 
@@ -121,7 +122,7 @@ def _(PACK, SET, TDATA, TREN, ext_ready, json, np, os, rt, tree, zipfile):
 
 
 @app.cell
-def _(CASES, DRGS_DIR, K, N_VIEWS, OUT, TDATA, TREN, json, md, np, rt, time, tree):
+def _(CASES, DRGS_DIR, K, N_VIEWS, OUT, TDATA, TREN, json, md, np, os, rt, time, tree):
     # c) 4DRGS, tree extraction, fits of all variants, evaluation
     import torch
 
@@ -130,7 +131,7 @@ def _(CASES, DRGS_DIR, K, N_VIEWS, OUT, TDATA, TREN, json, md, np, rt, time, tre
     for _c in CASES:
         _d = OUT / _c
         _d.mkdir(parents=True, exist_ok=True)
-        if (_d / "result.json").exists():
+        if (_d / "result.json").exists() and os.environ.get("FLOWSPLAT_TREE_RERUN") != "1":
             rows.append(json.loads((_d / "result.json").read_text()))
             print(_c, "done, loaded", flush=True)
             continue
