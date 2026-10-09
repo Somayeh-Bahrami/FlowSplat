@@ -85,3 +85,22 @@ results/step5.1_tree_dev_run1.json. 16 dev cases: 13 fitted, 3 errors.
   the estimated daughter radii, which are less reliable near the junction.
 - Nothing was tuned on these results; both changes are bug fixes of the
   GT-free tree extraction. Dev is run again before the test set.
+
+### Dev run 2 (after the fixes; Oct 9, repo `313b8eb`)
+
+results/step5.1_tree_dev_run2.json. 15 of 16 fitted, inlet correct in 15 of
+15 (three hypotheses); 609_0 still has no side branch in the 4DRGS volume
+(diagonal 28 mm).
+
+| Variant | Split err. mean (median) | < 10 % | Daughter Q err. | Parent Q err. |
+|---|---|---|---|---|
+| indep | 7.5 % (4.2 %) | 12 / 15 | 7.1 % | 5.6 % |
+| cont | 2.3 % (1.7 %) | 15 / 15 | 5.5 % | 4.5 % |
+| murray | 10.5 % (10.9 %) | 7 / 15 | 7.3 % | 6.8 % |
+| cont_murray (primary) | 4.9 % (4.6 %) | 14 / 15 | 6.5 % | 4.3 % |
+
+Pipeline works; the test run follows unchanged. Rule fixed now for the
+test set (before running it): a case without a usable tree (error) counts
+as a failure in the "< 10 %" share, and the mean split error is reported
+over the fitted cases together with the number of failures.
+
